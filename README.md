@@ -73,12 +73,20 @@ gcloud auth application-default login --project=ВАШ_ПРОЕКТ
 подхватит его само — в `.env.local` при этом ничего дописывать не нужно.
 
 Для деплоя на Vercel файловой системы под ключ нет, поэтому там нужен сервис-аккаунт:
-создать ключ JSON, дать аккаунту доступ к проекту и положить ключ целиком в переменную.
+выдать ему роль, создать ключ JSON и положить ключ целиком в переменную.
+
+Роль — **`roles/serviceusage.serviceUsageConsumer`**. У Cloud Text-to-Speech нет
+собственной IAM-роли: разрешений `texttospeech.*` не существует, а `roles/speech.*`
+относятся к Speech-to-Text и к синтезу отношения не имеют. Нужно ровно право
+вызывать включённые в проекте API, то есть `serviceusage.services.use`.
 
 ```bash
 cp .env.example .env.local
-base64 -i key.json | pbcopy   # вставить в GOOGLE_SERVICE_ACCOUNT_JSON
+base64 -i key.json | tr -d '\n' | pbcopy   # вставить в GOOGLE_SERVICE_ACCOUNT_JSON
 ```
+
+`tr` обязателен на Linux/CI: там `base64` переносит строки на 76 символах,
+а многострочное значение ломает парсинг `.env`.
 
 Код принимает и сырой JSON, и base64 — см. `src/lib/google-tts.ts`.
 
