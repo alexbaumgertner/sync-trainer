@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { get, put, BlobPreconditionFailedError } from "@vercel/blob";
 import type { UsageEntry, UsageTotals, UsageSummary } from "./api-types";
+export { budgetBlock } from "./budget";
 
 export type { UsageEntry, UsageTotals, UsageSummary };
 
@@ -159,7 +160,7 @@ export async function readUsage(): Promise<UsageSummary> {
   const { state } = await readState();
   const kind = storageKind();
   const month = state.months[new Date().toISOString().slice(0, 7)] ?? ZERO;
-  const budget = Number(process.env.TTS_BUDGET_USD ?? "");
+  const limits = budgetLimits();
 
   return {
     totalUsd: state.totals.usd,
@@ -167,9 +168,34 @@ export async function readUsage(): Promise<UsageSummary> {
     generations: state.totals.generations,
     monthUsd: month.usd,
     monthChars: month.chars,
-    budgetUsd: Number.isFinite(budget) && budget > 0 ? budget : null,
+    budgetUsd: limits.total,
+    monthLimitUsd: limits.month,
     storage: kind,
     volatile: kind === "memory",
     entries: state.entries.slice(0, 20),
   };
+}
+
+/* ------------------------------ лимиты -------------------------------- */
+
+/**
+ * Жёсткий стоп на генерацию.
+ *
+ * Нужен потому, что Google на Text-to-Speech spend cap не поддерживает:
+ * его бюджет умеет только присылать письма, причём с задержкой в несколько
+ * часов. Без этой проверки кнопку можно нажать двести раз подряд.
+ *
+ * Считается по НАШЕЙ оценке стоимости, а не по счёту Google, поэтому это
+ * защита от очевидного перерасхода, а не бухгалтерия до цента.
+ */
+export function budgetLimits(): { total: number | null; month: number | null } {
+  return {
+    total: positive(process.env.TTS_BUDGET_USD),
+    month: positive(process.env.TTS_MONTHLY_LIMIT_USD),
+  };
+}
+
+function positive(raw: string | undefined): number | null {
+  const value = Number(raw ?? "");
+  return Number.isFinite(value) && value > 0 ? value : null;
 }

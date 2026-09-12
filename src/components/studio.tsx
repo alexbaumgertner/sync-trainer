@@ -22,6 +22,7 @@ import {
   type VoiceTier,
 } from "@/lib/voices";
 import type { TtsRequest, UsageSummary } from "@/lib/api-types";
+import { budgetBlock } from "@/lib/budget";
 
 const EMPTY_SPEAKERS: string[] = [];
 
@@ -138,6 +139,9 @@ export default function Studio() {
   const silenceCount = (plan?.items.length ?? 0) - speechItems.length;
   const billable = speechItems.reduce((s, c) => s + c.billableChars, 0);
   const cost = estimateCostUsd(billable, usedVoices);
+
+  // Тот же расчёт, что и на сервере в /api/tts — общий budgetBlock.
+  const blockedByBudget = usage ? budgetBlock(usage, cost) : null;
 
   const loadExample = useCallback(async () => {
     const res = await fetch("/examples/panel.ssml");
@@ -365,15 +369,19 @@ export default function Studio() {
             </label>
           </div>
 
-          <BudgetCard usage={usage} pending={cost} />
+          <BudgetCard usage={usage} pending={cost} blocked={blockedByBudget} />
 
           <button
             type="button"
             onClick={generate}
-            disabled={busy || !script.trim() || !!plan?.error}
+            disabled={busy || !script.trim() || !!plan?.error || !!blockedByBudget}
             className="rounded-lg bg-neutral-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
           >
-            {busy ? `Синтез… ${speechItems.length} запросов к Google` : "Сгенерировать MP3"}
+            {busy
+              ? `Синтез… ${speechItems.length} запросов к Google`
+              : blockedByBudget
+                ? "Лимит бюджета исчерпан"
+                : "Сгенерировать MP3"}
           </button>
 
           {error && (
@@ -435,7 +443,15 @@ function FormatNote({ format, silenceCount }: { format: string; silenceCount: nu
   );
 }
 
-function BudgetCard({ usage, pending }: { usage: UsageSummary | null; pending: number }) {
+function BudgetCard({
+  usage,
+  pending,
+  blocked,
+}: {
+  usage: UsageSummary | null;
+  pending: number;
+  blocked: string | null;
+}) {
   if (!usage) return null;
 
   const share = usage.budgetUsd ? Math.min(usage.totalUsd / usage.budgetUsd, 1) : null;
@@ -491,6 +507,19 @@ function BudgetCard({ usage, pending }: { usage: UsageSummary | null; pending: n
         по нашей таблице тарифов, а не счёт Google: бесплатный лимит, скидки и изменения
         прайса здесь не учтены. Факт смотрите в биллинге Google Cloud.
       </p>
+
+      {blocked && (
+        <p className="mt-3 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-[11px] leading-relaxed text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
+          {blocked}
+        </p>
+      )}
+
+      {usage.monthLimitUsd !== null && (
+        <p className="mt-2 text-[11px] text-neutral-500">
+          Месячный лимит: ${usage.monthUsd.toFixed(2)} из ${usage.monthLimitUsd.toFixed(2)}.
+          По его достижении генерация останавливается.
+        </p>
+      )}
 
       {usage.volatile && (
         <p className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">

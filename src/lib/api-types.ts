@@ -44,7 +44,10 @@ export interface UsageSummary {
   generations: number;
   monthUsd: number;
   monthChars: number;
+  /** общий потолок, TTS_BUDGET_USD */
   budgetUsd: number | null;
+  /** месячный потолок, TTS_MONTHLY_LIMIT_USD */
+  monthLimitUsd: number | null;
   storage: "blob" | "file" | "memory";
   /** счётчик не переживёт перезапуск — на Vercel без Blob-стора */
   volatile: boolean;

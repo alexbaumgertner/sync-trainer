@@ -3,7 +3,7 @@ import { parseScript, planSynthesis, analyzeScript, DEFAULT_CHUNK_BYTES } from "
 import { synthesizePlan, explainError, hasCredentials, NO_CREDENTIALS } from "@/lib/google-tts";
 import { formatForVoices, estimateCostUsd, tierOf, TIER_LABEL, DEFAULT_VOICE } from "@/lib/voices";
 import { guard } from "@/lib/auth";
-import { recordUsage } from "@/lib/usage";
+import { recordUsage, readUsage, budgetBlock, budgetLimits } from "@/lib/usage";
 import type { TtsRequest } from "@/lib/api-types";
 
 export const runtime = "nodejs";
@@ -68,6 +68,29 @@ export async function POST(request: Request) {
   }
 
   const stats = analyzeScript(parsed.blocks, rate);
+  const distinctVoices = [...new Set(usedVoices)];
+  const pendingUsd = estimateCostUsd(billableChars, distinctVoices);
+
+  // Жёсткий стоп по бюджету. Проверяем ДО синтеза и с учётом стоимости
+  // самой заявки, иначе лимит можно было бы перешагнуть последним запросом.
+  const limits = budgetLimits();
+  if (limits.total !== null || limits.month !== null) {
+    let summary;
+    try {
+      summary = await readUsage();
+    } catch (error) {
+      // Лимит задан, а сколько потрачено — неизвестно. Отказываем: молча
+      // отключившийся предохранитель хуже временной недоступности.
+      console.error("[tts] не удалось прочитать расходы для проверки бюджета", error);
+      return NextResponse.json(
+        { error: "Не удалось проверить бюджет, генерация остановлена. Попробуйте позже." },
+        { status: 503 },
+      );
+    }
+    const blocked = budgetBlock(summary, pendingUsd);
+    if (blocked) return NextResponse.json({ error: blocked }, { status: 402 });
+  }
+
   const startedAt = Date.now();
 
   try {
@@ -84,12 +107,11 @@ export async function POST(request: Request) {
 
     // Учёт расходов не должен ронять уже оплаченную генерацию, поэтому
     // ошибка записи только логируется — аудио пользователь получает в любом случае.
-    const distinctVoices = [...new Set(usedVoices)];
     try {
       await recordUsage({
         at: new Date().toISOString(),
         chars: billableChars,
-        costUsd: estimateCostUsd(billableChars, distinctVoices),
+        costUsd: pendingUsd,
         tier: TIER_LABEL[tierOf(defaultVoice)],
         voices: distinctVoices,
         format,
