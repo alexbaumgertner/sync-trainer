@@ -424,14 +424,25 @@ const ghostButton =
 const inputClass =
   "w-full rounded-md border border-neutral-300 bg-white px-2 py-1.5 outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900";
 
+/** «1 пауза», «2 паузы», «5 пауз». */
+function plural(n: number, one: string, few: string, many: string): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) return many;
+  const mod10 = n % 10;
+  if (mod10 === 1) return one;
+  if (mod10 >= 2 && mod10 <= 4) return few;
+  return many;
+}
+
 function FormatNote({ format, silenceCount }: { format: string; silenceCount: number }) {
   return (
     <p className="mt-3 rounded-md bg-neutral-100 px-3 py-2 text-[11px] leading-relaxed text-neutral-600 dark:bg-neutral-900 dark:text-neutral-400">
       {format === "text" ? (
         <>
           <strong className="font-medium">Text-режим.</strong> Выбранные голоса не принимают SSML.
-          Разметка снимается автоматически, а {silenceCount} пауз вставляются реальной тишиной
-          при склейке — вручную делать ничего не нужно.
+          Разметка снимается автоматически, а паузы вставляются реальной тишиной при склейке —
+          вручную делать ничего не нужно.
+          {silenceCount > 0 && ` Сейчас в скрипте ${silenceCount} ${plural(silenceCount, "пауза", "паузы", "пауз")}.`}
         </>
       ) : (
         <>
