@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   parseScript,
@@ -20,7 +21,7 @@ import {
   type VoiceOption,
   type VoiceTier,
 } from "@/lib/voices";
-import type { TtsRequest } from "@/lib/api-types";
+import type { TtsRequest, UsageSummary } from "@/lib/api-types";
 
 const EMPTY_SPEAKERS: string[] = [];
 
@@ -59,7 +60,23 @@ export default function Studio() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
   const lastUrl = useRef<string | null>(null);
+  const router = useRouter();
+
+  const refreshUsage = useCallback(() => {
+    fetch("/api/usage")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: UsageSummary | null) => data && setUsage(data))
+      .catch(() => {});
+  }, []);
+
+  useEffect(refreshUsage, [refreshUsage]);
+
+  const logout = useCallback(async () => {
+    await fetch("/api/logout", { method: "POST" });
+    router.refresh();
+  }, [router]);
 
   /* ---- список голосов из Google (с фолбэком, если нет кредов) ---- */
   useEffect(() => {
@@ -164,24 +181,30 @@ export default function Studio() {
         elapsedMs: Number(res.headers.get("X-Elapsed-Ms") ?? 0),
         format: res.headers.get("X-Format") ?? format,
       });
+      refreshUsage();
     } catch (e) {
       setError((e as Error).message);
       setResult(null);
     } finally {
       setBusy(false);
     }
-  }, [script, mode, voice, speakerVoices, rate, stripLabels, maxBytes, format]);
+  }, [script, mode, voice, speakerVoices, rate, stripLabels, maxBytes, format, refreshUsage]);
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
-      <header className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Тренажёр синхрониста · генератор аудио
-        </h1>
-        <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-          Скрипт → озвучка через Google Cloud Text-to-Speech. Длинный текст режется на куски
-          по {GOOGLE_MAX_INPUT_BYTES} байт (лимит API) и склеивается обратно в один MP3.
-        </p>
+      <header className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Тренажёр синхрониста · генератор аудио
+          </h1>
+          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+            Скрипт → озвучка через Google Cloud Text-to-Speech. Длинный текст режется на куски
+            по {GOOGLE_MAX_INPUT_BYTES} байт (лимит API) и склеивается обратно в один MP3.
+          </p>
+        </div>
+        <button type="button" onClick={logout} className={ghostButton}>
+          Выйти
+        </button>
       </header>
 
       {voicesWarning && (
@@ -342,6 +365,8 @@ export default function Studio() {
             </label>
           </div>
 
+          <BudgetCard usage={usage} pending={cost} />
+
           <button
             type="button"
             onClick={generate}
@@ -407,6 +432,74 @@ function FormatNote({ format, silenceCount }: { format: string; silenceCount: nu
         </>
       )}
     </p>
+  );
+}
+
+function BudgetCard({ usage, pending }: { usage: UsageSummary | null; pending: number }) {
+  if (!usage) return null;
+
+  const share = usage.budgetUsd ? Math.min(usage.totalUsd / usage.budgetUsd, 1) : null;
+
+  return (
+    <div className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+      <h2 className="mb-3 text-sm font-medium">Бюджет</h2>
+
+      <div className="flex items-baseline gap-2">
+        <span className="text-2xl font-semibold tabular-nums">${usage.totalUsd.toFixed(2)}</span>
+        {usage.budgetUsd && (
+          <span className="text-xs text-neutral-500">из ${usage.budgetUsd.toFixed(0)}</span>
+        )}
+        {pending > 0 && (
+          <span className="ml-auto text-xs text-neutral-500">
+            эта генерация +${pending.toFixed(3)}
+          </span>
+        )}
+      </div>
+
+      {share !== null && (
+        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+          <div
+            className={`h-full rounded-full ${share > 0.8 ? "bg-red-500" : "bg-neutral-900 dark:bg-white"}`}
+            style={{ width: `${Math.max(share * 100, 0.5)}%` }}
+          />
+        </div>
+      )}
+
+      <dl className="mt-3 grid grid-cols-3 gap-2 text-xs text-neutral-500">
+        <div>
+          <dt>В этом месяце</dt>
+          <dd className="font-medium tabular-nums text-neutral-900 dark:text-neutral-100">
+            ${usage.monthUsd.toFixed(2)}
+          </dd>
+        </div>
+        <div>
+          <dt>Генераций</dt>
+          <dd className="font-medium tabular-nums text-neutral-900 dark:text-neutral-100">
+            {usage.generations}
+          </dd>
+        </div>
+        <div>
+          <dt>Символов</dt>
+          <dd className="font-medium tabular-nums text-neutral-900 dark:text-neutral-100">
+            {usage.totalChars.toLocaleString("ru-RU")}
+          </dd>
+        </div>
+      </dl>
+
+      <p className="mt-3 text-[11px] leading-relaxed text-neutral-500">
+        Символы точные — мы сами их отправили. Доллары это <strong className="font-medium">оценка</strong>{" "}
+        по нашей таблице тарифов, а не счёт Google: бесплатный лимит, скидки и изменения
+        прайса здесь не учтены. Факт смотрите в биллинге Google Cloud.
+      </p>
+
+      {usage.volatile && (
+        <p className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+          Счётчик хранится в памяти и обнулится при перезапуске. Чтобы он пережил
+          деплой, подключите Vercel Blob — переменная{" "}
+          <code className="font-mono">BLOB_READ_WRITE_TOKEN</code> появится сама.
+        </p>
+      )}
+    </div>
   );
 }
 

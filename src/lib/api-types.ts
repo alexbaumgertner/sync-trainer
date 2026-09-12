@@ -20,3 +20,33 @@ export interface TtsErrorResponse {
   error: string;
   detail?: string;
 }
+
+export interface UsageEntry {
+  at: string;
+  chars: number;
+  costUsd: number;
+  tier: string;
+  voices: string[];
+  format: string;
+  chunks: number;
+  seconds: number;
+}
+
+export interface UsageTotals {
+  usd: number;
+  chars: number;
+  generations: number;
+}
+
+export interface UsageSummary {
+  totalUsd: number;
+  totalChars: number;
+  generations: number;
+  monthUsd: number;
+  monthChars: number;
+  budgetUsd: number | null;
+  storage: "blob" | "file" | "memory";
+  /** счётчик не переживёт перезапуск — на Vercel без Blob-стора */
+  volatile: boolean;
+  entries: UsageEntry[];
+}

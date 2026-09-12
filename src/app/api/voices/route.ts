@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { getClient, explainError, hasCredentials, NO_CREDENTIALS } from "@/lib/google-tts";
+import { guard } from "@/lib/auth";
 import { FALLBACK_VOICES, makeVoiceOption, type VoiceOption } from "@/lib/voices";
 
 export const runtime = "nodejs";
-export const revalidate = 3600;
+export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const denied = await guard();
+  if (denied) return denied;
+
   const prefix = new URL(request.url).searchParams.get("lang") ?? "en";
 
   if (!hasCredentials()) {

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { parseScript, planSynthesis, analyzeScript, DEFAULT_CHUNK_BYTES } from "@/lib/ssml";
 import { synthesizePlan, explainError, hasCredentials, NO_CREDENTIALS } from "@/lib/google-tts";
-import { formatForVoices, DEFAULT_VOICE } from "@/lib/voices";
+import { formatForVoices, estimateCostUsd, tierOf, TIER_LABEL, DEFAULT_VOICE } from "@/lib/voices";
+import { guard } from "@/lib/auth";
+import { recordUsage } from "@/lib/usage";
 import type { TtsRequest } from "@/lib/api-types";
 
 export const runtime = "nodejs";
@@ -11,6 +13,9 @@ export const maxDuration = 300;
 const MAX_BILLABLE_CHARS = Number(process.env.TTS_MAX_CHARS ?? 120_000);
 
 export async function POST(request: Request) {
+  const denied = await guard();
+  if (denied) return denied;
+
   let body: TtsRequest;
   try {
     body = (await request.json()) as TtsRequest;
@@ -76,6 +81,24 @@ export async function POST(request: Request) {
       speakingRate,
       pitch: body.pitch,
     });
+
+    // Учёт расходов не должен ронять уже оплаченную генерацию, поэтому
+    // ошибка записи только логируется — аудио пользователь получает в любом случае.
+    const distinctVoices = [...new Set(usedVoices)];
+    try {
+      await recordUsage({
+        at: new Date().toISOString(),
+        chars: billableChars,
+        costUsd: estimateCostUsd(billableChars, distinctVoices),
+        tier: TIER_LABEL[tierOf(defaultVoice)],
+        voices: distinctVoices,
+        format,
+        chunks: speechItems.length,
+        seconds: Math.round(stats.estimatedSeconds),
+      });
+    } catch (error) {
+      console.error("[tts] не удалось записать расход", error);
+    }
 
     return new Response(new Uint8Array(audio), {
       headers: {
