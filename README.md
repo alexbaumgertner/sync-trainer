@@ -1,36 +1,175 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Тренажёр синхрониста — генератор аудио (MVP)
 
-## Getting Started
+Скрипт панельной дискуссии → один MP3 с озвучкой через **Google Cloud Text-to-Speech**.
+Next.js 16 (App Router) + TypeScript + Tailwind.
 
-First, run the development server:
+Скрипт пока готовится снаружи (Gemini по промту из PDF/Word) и вставляется в поле.
+Генерация скрипта внутри приложения и библиотека упражнений — релиз 2.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Три вещи, которые определяют архитектуру
+
+### 1. Самые естественные голоса не принимают SSML
+
+Chirp 3 HD и Journey звучат заметно живее Neural2, но работают **только с plain text**:
+запрос `input: { ssml }` к ним падает с `INVALID_ARGUMENT`. Именно поэтому пример из
+документации Google (`en-US-Journey-F` + SSML) не заработал бы как есть.
+
+Приложение решает это **автоматически, без ручной работы**: формат выбирается не
+пользователем, а выбранными голосами.
+
+| Выбраны голоса | Режим | Что происходит с паузами |
+|---|---|---|
+| только Neural2 / Wavenet / Standard / Studio | `ssml` | `<break>` уходит в запрос разметкой |
+| хоть один Chirp 3 HD / Journey | `text` | разметка снимается, `<break>` становится **реальной тишиной** при склейке |
+
+Тишина генерируется локально (`src/lib/silence.ts`, lamejs) в том же формате,
+что отдаёт Google — 24 кГц моно, MPEG-2 Layer III, 576 сэмплов на фрейм, —
+поэтому куски стыкуются без пересборки файла. Точность проверена: 13 пауз
+по 1.5 с дают 19.344 с против расчётных 19.5 с.
+
+Смешивать форматы в одном файле нельзя (разметка применялась бы выборочно),
+поэтому достаточно одного text-only голоса, чтобы весь скрипт пошёл текстом.
+
+### 2. Лимит 5000 байт на запрос
+
+`synthesizeSpeech` принимает максимум **5000 байт**, причём в SSML-режиме **теги
+считаются** — и в лимит, и в счёт. Пример панели это 15 463 байта, в один запрос
+он физически не влезает. Поэтому:
+
+```
+скрипт → блоки (<p>, <break>) → план (речь + паузы) → N запросов → склейка MP3
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Режут только по границам абзацев, сверхдлинный абзац — по предложениям,
+так что ни одна фраза не рвётся посередине.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 3. Цена голоса различается в 40 раз
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Семейство | SSML | Цена / 1 млн симв.* |
+|---|---|---|
+| Standard | полный | ~$4 |
+| Neural2 / WaveNet / Polyglot | полный | ~$16 |
+| **Chirp 3 HD** (по умолчанию) | **нет, text-режим** | ~$30 |
+| Journey | нет, text-режим | ~$30 |
+| Studio | подмножество тегов | **~$160** |
 
-## Learn More
+\* ориентировочно, сверяйтесь с [прайсом Google](https://cloud.google.com/text-to-speech/pricing).
+Пример панели на 17 минут — около **$0.45** на Chirp 3 HD и **$0.24** на Neural2.
+Studio в 5 раз дороже Chirp — легко сжечь $300 за пару сотен прогонов.
+UI показывает оценку до нажатия кнопки, `TTS_MAX_CHARS` ограничивает одну генерацию.
 
-To learn more about Next.js, take a look at the following resources:
+## Быстрый старт
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Google Cloud
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Нужны включённый **Cloud Text-to-Speech API** и проект с биллингом.
+Если проект уже настроен, для локальной разработки достаточно войти своим аккаунтом:
 
-## Deploy on Vercel
+```bash
+gcloud auth application-default login --project=ВАШ_ПРОЕКТ
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Ключ ляжет в `~/.config/gcloud/application_default_credentials.json`, приложение
+подхватит его само — в `.env.local` при этом ничего дописывать не нужно.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Для деплоя на Vercel файловой системы под ключ нет, поэтому там нужен сервис-аккаунт:
+создать ключ JSON, дать аккаунту доступ к проекту и положить ключ целиком в переменную.
+
+```bash
+cp .env.example .env.local
+base64 -i key.json | pbcopy   # вставить в GOOGLE_SERVICE_ACCOUNT_JSON
+```
+
+Код принимает и сырой JSON, и base64 — см. `src/lib/google-tts.ts`.
+
+### Запуск
+
+```bash
+npm install
+npm run dev
+```
+
+Открыть http://localhost:3000 → **«Загрузить пример»** → **«Сгенерировать MP3»**.
+
+### Дымовой тест без обращения к Google
+
+```bash
+npm run smoke
+```
+
+Проверяет разбор скрипта, оба режима нарезки в обеих раскладках голосов,
+лимит 5000 байт, очистку разметки в text-режиме и валидность склеенной тишины.
+
+## Как устроено
+
+```
+src/
+  lib/
+    ssml.ts          разбор скрипта, план синтеза для обоих режимов, статистика.
+                     Изоморфный: один и тот же код считает превью в браузере
+                     и режет на сервере
+    silence.ts       генератор MP3-тишины для text-режима (lamejs)
+    voices.ts        каталог голосов, тарифы, автораздача, выбор формата
+    google-tts.ts    клиент Google, ретраи, параллельный синтез, склейка, ошибки
+    api-types.ts     контракт запроса
+  app/
+    api/tts/route.ts     POST → audio/mpeg
+    api/voices/route.ts  GET  → голоса с пометкой, кто принимает SSML
+  components/studio.tsx  весь UI
+scripts/smoke.mjs        дымовой тест пайплайна
+public/examples/panel.ssml
+```
+
+### Режимы озвучки
+
+- **Разные голоса** — спикер определяется по началу абзаца (`Moderator: …`), каждому
+  выдаётся свой голос, и нарезка никогда не смешивает двух спикеров в одном запросе.
+  Имя спикера по умолчанию **не произносится** — смена голоса и так слышна.
+  Голоса раздаются с разными акцентами (US / GB / AU / IN): для тренировки синхрониста
+  это ближе к реальной панели, чем один диктор.
+- **Один голос** — весь скрипт одним голосом.
+
+### Защита от падений
+
+- Наличие кредов проверяется **до** создания клиента: иначе google-gax уходит за ADC
+  на metadata-сервер, и отказ прилетает отдельным `unhandledRejection` мимо `try/catch`
+  (в dev — шум в логах, в проде может уронить функцию).
+- Клиент инициализируется **до** параллельного пула — по той же причине.
+- Если голос не принимает `speakingRate` / `pitch` (что вероятно для Chirp 3 HD),
+  запрос автоматически повторяется без них, вместо того чтобы упасть.
+- Ретраи с экспоненциальной паузой на `UNAVAILABLE`, `RESOURCE_EXHAUSTED` и прочих
+  временных кодах.
+
+## Проверено
+
+`npm run smoke` — все проверки зелёные:
+
+| Режим | Запросов | Пауз | Макс. кусок | Символов |
+|---|---|---|---|---|
+| ssml / один голос | 4 | 0 | 4462 B | 15 530 |
+| ssml / разные голоса | 14 | 0 | 1442 B | 15 762 |
+| text / один голос | 14 | 13 | 1391 B | 14 988 |
+| text / разные голоса | 14 | 13 | 1369 B | 14 760 |
+
+Разбор примера: 7 спикеров, 14 абзацев, 19.5 с пауз, ~17:19 звучания.
+UI, автовыбор формата, оценка стоимости и сообщения об ошибках проверены в браузере.
+
+**Не проверено: реальный вызов Google API** — на машине не было учётных данных.
+Отсюда два риска, которые вскроются на первом же прогоне с ключом:
+
+1. Точные имена голосов Chirp 3 HD в фолбэк-списке могут отличаться. Как только
+   креды есть, `/api/voices` берёт **живой список из Google** и перекрывает фолбэк,
+   так что проблема самоустраняется — но до первого успешного запроса список
+   ориентировочный.
+2. Принимает ли Chirp 3 HD `speakingRate`. Если нет — сработает автоматический
+   повтор без него, темп просто останется дефолтным.
+
+## Что дальше (релиз 2)
+
+- **Генерация скрипта из документа** — PDF/Word → промт → SSML прямо в приложении.
+- **Библиотека упражнений** — хранение в Vercel Blob вместо отдачи в память браузера.
+- **Прогресс по кускам** — сейчас кнопка просто ждёт; на 14 запросах это ~10–20 с.
+  Лечится стримингом (SSE).
+- **Параметры тренировки** — скорость 90/100/110/120 %, фоновый шум зала.
+  «Грязная» речь (оговорки, самоперебивания) в примере уже есть — это задаётся промтом.
+- **Параллельная дорожка с текстом** — тайм-коды по абзацам для самопроверки.
