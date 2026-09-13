@@ -1,5 +1,12 @@
 import type { CollectionConfig } from "payload";
 import { adminOnly, authenticated, ownedBy, ownedByProject, ownUsage } from "@/lib/access";
+import { otpCookieStrategy } from "@/lib/payload-strategy";
+import {
+  INVITE_TTL_MS,
+  generateInviteToken,
+  hashInviteToken,
+  inviteLink,
+} from "@/lib/invite-token";
 
 const SOURCE_LANGS = [
   { label: "English", value: "en" },
@@ -10,9 +17,10 @@ const SOURCE_LANGS = [
 
 export const Users: CollectionConfig = {
   slug: "users",
-  // Локальная стратегия остаётся для входа в админку. Вход по одноразовому
-  // коду добавляется отдельной стратегией в T02, поверх этой же коллекции.
-  auth: true,
+  // Две стратегии на одной коллекции: локальная — вход в админку по паролю,
+  // otp-cookie — сессия приложения, выданная после кода на почту. Благодаря
+  // второй права доступа из коллекций применяются к запросам приложения сами.
+  auth: { strategies: [otpCookieStrategy] },
   admin: { useAsTitle: "email", defaultColumns: ["email", "role", "createdAt"] },
   access: {
     read: ({ req: { user } }) =>
@@ -59,16 +67,62 @@ export const Invitations: CollectionConfig = {
   slug: "invitations",
   admin: { useAsTitle: "email", defaultColumns: ["email", "acceptedAt", "expiresAt"] },
   access: { read: adminOnly, create: adminOnly, update: adminOnly, delete: adminOnly },
+  hooks: {
+    // Токен выписывается здесь, а не в коде вызова: тогда приглашение работает
+    // одинаково и из админки, и из скрипта. Сырой токен живёт ровно до отправки
+    // письма и нигде не сохраняется — в базе только хеш.
+    beforeValidate: [
+      ({ req, operation, data }) => {
+        if (operation !== "create" || !data) return data;
+
+        // Токен может прийти из кода через context — тогда вызывающий знает
+        // ссылку и может её показать. Из админки его здесь и выписываем.
+        const context = req.context as Record<string, unknown>;
+        const token =
+          typeof context.inviteToken === "string" ? context.inviteToken : generateInviteToken();
+        context.inviteToken = token;
+
+        return {
+          ...data,
+          email: String(data.email ?? "").trim().toLowerCase(),
+          tokenHash: hashInviteToken(token),
+          expiresAt: data.expiresAt ?? new Date(Date.now() + INVITE_TTL_MS).toISOString(),
+          invitedBy: data.invitedBy ?? req.user?.id,
+        };
+      },
+    ],
+    afterChange: [
+      async ({ req, operation, doc }) => {
+        if (operation !== "create") return doc;
+        const token = (req.context as Record<string, unknown>).inviteToken;
+        if (typeof token !== "string") return doc;
+
+        // Динамический импорт: модуль почты помечен server-only, а конфигурация
+        // коллекций читается в том числе вне контекста запроса.
+        const { sendEmail, inviteEmail } = await import("@/lib/email");
+        try {
+          await sendEmail({ to: doc.email, ...inviteEmail(inviteLink(token), doc.note) });
+        } catch (error) {
+          // Приглашение уже создано; непосланное письмо не повод терять запись.
+          req.payload.logger.error({ err: error }, "не удалось отправить приглашение");
+        }
+        return doc;
+      },
+    ],
+  },
   fields: [
     { name: "email", type: "email", required: true, index: true },
     {
       name: "tokenHash",
       type: "text",
-      required: true,
       index: true,
       admin: { readOnly: true, description: "Хеш токена. Сам токен есть только в письме" },
     },
-    { name: "expiresAt", type: "date", required: true },
+    {
+      name: "expiresAt",
+      type: "date",
+      admin: { description: "Пусто — две недели от создания" },
+    },
     { name: "acceptedAt", type: "date", admin: { readOnly: true } },
     { name: "acceptedBy", type: "relationship", relationTo: "users", admin: { readOnly: true } },
     { name: "invitedBy", type: "relationship", relationTo: "users" },
@@ -354,9 +408,40 @@ export const UsageEvents: CollectionConfig = {
   ],
 };
 
+/**
+ * A1–A3: одноразовые коды. Хранится только хеш — по содержимому базы войти нельзя.
+ * Пишет и читает эту коллекцию исключительно сервер, поэтому доступ закрыт всем,
+ * кроме администратора: в UI она не нужна, а в админке полезна при разборе жалоб.
+ */
+export const OtpCodes: CollectionConfig = {
+  slug: "otp-codes",
+  admin: { useAsTitle: "email", defaultColumns: ["email", "expiresAt", "attempts", "consumedAt"] },
+  access: { read: adminOnly, create: adminOnly, update: adminOnly, delete: adminOnly },
+  fields: [
+    { name: "email", type: "email", required: true, index: true },
+    { name: "codeHash", type: "text", required: true },
+    { name: "expiresAt", type: "date", required: true, index: true },
+    { name: "attempts", type: "number", required: true, defaultValue: 0 },
+    { name: "consumedAt", type: "date" },
+    {
+      name: "requestIp",
+      type: "text",
+      index: true,
+      admin: { description: "Для ограничения частоты по адресу (A3)" },
+    },
+    {
+      name: "delivered",
+      type: "checkbox",
+      defaultValue: false,
+      admin: { description: "Письмо отправлено. Для неприглашённых адресов остаётся false (A4)" },
+    },
+  ],
+};
+
 export const collections: CollectionConfig[] = [
   Users,
   Invitations,
+  OtpCodes,
   Projects,
   Documents,
   Generations,

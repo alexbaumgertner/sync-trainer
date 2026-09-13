@@ -18,6 +18,7 @@ export default defineConfig({
     alias: {
       "@": path.resolve(dirname, "src"),
       "@payload-config": path.resolve(dirname, "src/payload.config.ts"),
+      "server-only": path.resolve(dirname, "tests/stubs/server-only.ts"),
     },
   },
 });

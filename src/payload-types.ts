@@ -69,6 +69,7 @@ export interface Config {
   collections: {
     users: User;
     invitations: Invitation;
+    'otp-codes': OtpCode;
     projects: Project;
     documents: Document;
     generations: Generation;
@@ -85,6 +86,7 @@ export interface Config {
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
     invitations: InvitationsSelect<false> | InvitationsSelect<true>;
+    'otp-codes': OtpCodesSelect<false> | OtpCodesSelect<true>;
     projects: ProjectsSelect<false> | ProjectsSelect<true>;
     documents: DocumentsSelect<false> | DocumentsSelect<true>;
     generations: GenerationsSelect<false> | GenerationsSelect<true>;
@@ -174,12 +176,37 @@ export interface Invitation {
   /**
    * Хеш токена. Сам токен есть только в письме
    */
-  tokenHash: string;
-  expiresAt: string;
+  tokenHash?: string | null;
+  /**
+   * Пусто — две недели от создания
+   */
+  expiresAt?: string | null;
   acceptedAt?: string | null;
   acceptedBy?: (number | null) | User;
   invitedBy?: (number | null) | User;
   note?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "otp-codes".
+ */
+export interface OtpCode {
+  id: number;
+  email: string;
+  codeHash: string;
+  expiresAt: string;
+  attempts: number;
+  consumedAt?: string | null;
+  /**
+   * Для ограничения частоты по адресу (A3)
+   */
+  requestIp?: string | null;
+  /**
+   * Письмо отправлено. Для неприглашённых адресов остаётся false (A4)
+   */
+  delivered?: boolean | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -359,6 +386,10 @@ export interface PayloadLockedDocument {
         value: number | Invitation;
       } | null)
     | ({
+        relationTo: 'otp-codes';
+        value: number | OtpCode;
+      } | null)
+    | ({
         relationTo: 'projects';
         value: number | Project;
       } | null)
@@ -467,6 +498,21 @@ export interface InvitationsSelect<T extends boolean = true> {
   acceptedBy?: T;
   invitedBy?: T;
   note?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "otp-codes_select".
+ */
+export interface OtpCodesSelect<T extends boolean = true> {
+  email?: T;
+  codeHash?: T;
+  expiresAt?: T;
+  attempts?: T;
+  consumedAt?: T;
+  requestIp?: T;
+  delivered?: T;
   updatedAt?: T;
   createdAt?: T;
 }

@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { buildConfig } from "payload";
 import { postgresAdapter } from "@payloadcms/db-postgres";
 import { lexicalEditor } from "@payloadcms/richtext-lexical";
+import { resendAdapter } from "@payloadcms/email-resend";
 import { collections } from "@/collections";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -35,6 +36,18 @@ export default buildConfig({
     push: process.env.NODE_ENV !== "production",
     migrationDir: path.resolve(dirname, "../migrations"),
   }),
+
+  // Без ключа Payload печатает письма в консоль — в разработке это то,
+  // что нужно, а в проде отсутствие ключа заметно сразу.
+  ...(process.env.RESEND_API_KEY
+    ? {
+        email: resendAdapter({
+          defaultFromAddress: process.env.EMAIL_FROM_ADDRESS ?? "noreply@example.com",
+          defaultFromName: process.env.EMAIL_FROM_NAME ?? "Тренажёр синхрониста",
+          apiKey: process.env.RESEND_API_KEY,
+        }),
+      }
+    : {}),
 
   secret: process.env.PAYLOAD_SECRET ?? "",
   typescript: { outputFile: path.resolve(dirname, "payload-types.ts") },

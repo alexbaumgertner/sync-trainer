@@ -18,12 +18,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "invite": "node --import tsx scripts/invite.mjs"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
     "@google-cloud/text-to-speech": "^7.1.0",
     "@payloadcms/db-postgres": "^3.89.0",
+    "@payloadcms/email-resend": "^3.89.0",
     "@payloadcms/next": "^3.89.0",
     "@payloadcms/richtext-lexical": "^3.89.0",
     "@payloadcms/storage-vercel-blob": "^3.89.0",
@@ -33,6 +35,7 @@
     "payload": "^3.89.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "resend": "^6.28.0",
     "server-only": "^0.0.1"
   },
   "devDependencies": {
