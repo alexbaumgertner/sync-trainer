@@ -13,6 +13,8 @@
  * в лог, чтобы промах было видно в логе сборки, а не через неделю в данных.
  */
 
+import crypto from "node:crypto";
+
 const SOURCES = ["DATABASE_URI", "DATABASE_URL", "POSTGRES_URL"] as const;
 
 let announced = false;
@@ -24,7 +26,7 @@ export function databaseUrl(): string {
 
     if (!announced) {
       announced = true;
-      console.info(`[db] подключение из ${name}: ${describe(value)}`);
+      console.info(`[db] подключение из ${name}: ${describe(value)} · отпечаток ${fingerprint(value)}`);
     }
     return value;
   }
@@ -39,5 +41,22 @@ function describe(connectionString: string): string {
     return `${url.hostname}${url.pathname}`;
   } catch {
     return "строка подключения не разбирается";
+  }
+}
+
+/**
+ * Короткий отпечаток узла.
+ *
+ * Нужен потому, что Vercel вырезает из логов значения, похожие на секреты, —
+ * и узел базы там превращается в [REDACTED]. Отпечаток на секрет не похож,
+ * поэтому выживает: сравнив его у боевого и preview-деплоя, видно, разные
+ * базы или одна. Совпал — стенд пишет в продакшен.
+ */
+function fingerprint(connectionString: string): string {
+  try {
+    const host = new URL(connectionString).hostname;
+    return crypto.createHash("sha256").update(host).digest("hex").slice(0, 8);
+  } catch {
+    return "—";
   }
 }
