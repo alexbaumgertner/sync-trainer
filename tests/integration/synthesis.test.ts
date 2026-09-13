@@ -56,6 +56,32 @@ describe("проверка разметки до синтеза", () => {
   });
 });
 
+describe("оценка длительности", () => {
+  const withLabels =
+    '<speak><prosody rate="105%">' +
+    '<p>Elena Vance (Moderator): Речь первого спикера в несколько слов.</p>' +
+    BREAK +
+    "<p>Dr. Aris Thorne (Researcher): Речь второго спикера тоже в несколько слов.</p>" +
+    "</prosody></speak>";
+
+  it("не считает метки спикеров произносимыми, когда они снимаются", () => {
+    const withoutStrip = validateForSynthesis(withLabels, { perSpeaker: true });
+    const withStrip = validateForSynthesis(withLabels, { perSpeaker: true, stripLabels: true });
+
+    // Метки «Elena Vance (Moderator): » и «Dr. Aris Thorne (Researcher): »
+    // не звучат, поэтому оценка со снятием должна быть короче
+    expect(withStrip.estimatedSeconds).toBeLessThan(withoutStrip.estimatedSeconds);
+  });
+
+  it("паузы учитываются в оценке", () => {
+    const noBreak = '<speak><p>Речь без пауз совсем.</p></speak>';
+    const withBreak = '<speak><p>Речь без пауз совсем.</p>' + BREAK + "<p>Вторая.</p></speak>";
+    expect(validateForSynthesis(withBreak).estimatedSeconds).toBeGreaterThan(
+      validateForSynthesis(noBreak).estimatedSeconds,
+    );
+  });
+});
+
 describe("пометка синтетического материала в файле", () => {
   const mp3 = Buffer.from([0xff, 0xf3, 0x84, 0xc4, 0x00, 0x00]);
 

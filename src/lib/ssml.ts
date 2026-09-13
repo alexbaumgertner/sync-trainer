@@ -369,7 +369,11 @@ export interface ScriptStats {
 /** Примерно 14 символов в секунду для английской речи на скорости 100%. */
 const CHARS_PER_SECOND = 14;
 
-export function analyzeScript(blocks: Block[], rate: string | null): ScriptStats {
+export function analyzeScript(
+  blocks: Block[],
+  rate: string | null,
+  opts: { stripLabels?: boolean } = {},
+): ScriptStats {
   const speakers: string[] = [];
   let spokenChars = 0;
   let breakSeconds = 0;
@@ -382,7 +386,11 @@ export function analyzeScript(blocks: Block[], rate: string | null): ScriptStats
     }
     paragraphs += 1;
     if (block.speaker && !speakers.includes(block.speaker)) speakers.push(block.speaker);
-    spokenChars += block.body.replace(/<[^>]+>/g, "").length;
+    // В режиме разных голосов метка спикера не произносится — значит и в оценку
+    // длительности попадать не должна, иначе она завышена на каждой реплике.
+    let spoken = block.body.replace(/<[^>]+>/g, "");
+    if (opts.stripLabels && block.speaker) spoken = spoken.replace(SPEAKER_RE, "");
+    spokenChars += spoken.length;
   }
 
   const multiplier = rate ? (parseFloat(rate) || 100) / 100 : 1;
@@ -508,7 +516,9 @@ export function validateForSynthesis(
     );
   }
 
-  const stats = analyzeScript(parsed.blocks, opts.rate ?? parsed.rate);
+  const stats = analyzeScript(parsed.blocks, opts.rate ?? parsed.rate, {
+    stripLabels: opts.stripLabels,
+  });
   if (stats.paragraphs === 0) warnings.push("В разметке нет ни одного абзаца <p>.");
 
   return {
