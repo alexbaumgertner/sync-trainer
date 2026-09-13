@@ -5,6 +5,7 @@ import { postgresAdapter } from "@payloadcms/db-postgres";
 import { lexicalEditor } from "@payloadcms/richtext-lexical";
 import { resendAdapter } from "@payloadcms/email-resend";
 import { collections } from "@/collections";
+import { databaseUrl } from "@/lib/database-url";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -22,15 +23,7 @@ export default buildConfig({
   editor: lexicalEditor(),
 
   db: postgresAdapter({
-    // Интеграция Postgres в Vercel подставляет переменную под своим именем,
-    // поэтому принимаем все три и не заставляем дублировать её руками.
-    pool: {
-      connectionString:
-        process.env.DATABASE_URI ??
-        process.env.POSTGRES_URL ??
-        process.env.DATABASE_URL ??
-        "",
-    },
+    pool: { connectionString: databaseUrl() },
     // Миграции хранятся в репозитории и применяются осознанно, а не на лету:
     // автоматическое изменение схемы в проде — способ потерять данные.
     push: process.env.NODE_ENV !== "production",
