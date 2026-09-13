@@ -1,4 +1,6 @@
-import "server-only";
+// Без пометки server-only намеренно: модуль используют и маршруты Next,
+// и скрипты обслуживания, которые исполняются вне Next. В клиентский код он
+// не попадёт — тянет за собой Payload и доступ к базе.
 import crypto from "node:crypto";
 import { payloadClient } from "./payload";
 import { codeEmail, sendEmail } from "./email";

@@ -1,201 +1,161 @@
-import "server-only";
-import fs from "node:fs/promises";
-import path from "node:path";
-import { get, put, BlobPreconditionFailedError } from "@vercel/blob";
-import type { UsageEntry, UsageTotals, UsageSummary } from "./api-types";
-export { budgetBlock } from "./budget";
+// Без пометки server-only намеренно: модуль используют и маршруты Next,
+// и скрипты обслуживания, которые исполняются вне Next. В клиентский код он
+// не попадёт — тянет за собой Payload и доступ к базе.
+import { payloadClient } from "./payload";
+import { budgetBlock } from "./budget";
+import type { UsageEntry, UsageSummary } from "./api-types";
 
-export type { UsageEntry, UsageTotals, UsageSummary };
+export type { UsageEntry, UsageSummary };
+export { budgetBlock };
 
 /**
  * Учёт расходов.
  *
- * Важно про точность: количество символов — точное, мы сами их отправили.
- * Доллары — ОЦЕНКА по нашей таблице тарифов (lib/voices.ts), а не факт
- * из счёта Google. Расхождение возможно из-за бесплатного лимита, скидок
- * и изменений прайса, поэтому в UI это подписано как оценка.
- */
-
-const BLOB_PATH = "usage/usage.json";
-const LOCAL_PATH = path.join(process.cwd(), ".data", "usage.json");
-const MAX_ENTRIES = 200;
-
-export interface UsageState {
-  /** Агрегаты живут отдельно от журнала: журнал обрезается, итог — нет. */
-  totals: UsageTotals;
-  /** ключ — "YYYY-MM" */
-  months: Record<string, UsageTotals>;
-  entries: UsageEntry[];
-}
-
-export type StorageKind = UsageSummary["storage"];
-
-const ZERO: UsageTotals = { usd: 0, chars: 0, generations: 0 };
-const EMPTY: UsageState = { totals: { ...ZERO }, months: {}, entries: [] };
-let memory: UsageState = EMPTY;
-
-function storageKind(): StorageKind {
-  if (process.env.BLOB_READ_WRITE_TOKEN?.trim()) return "blob";
-  // На Vercel файловая система только для чтения (кроме /tmp), поэтому
-  // без Blob-стора остаётся память: цифры сбросятся при перезапуске.
-  if (process.env.VERCEL) return "memory";
-  return "file";
-}
-
-/* ------------------------------- чтение ------------------------------- */
-
-async function readState(): Promise<{ state: UsageState; etag?: string }> {
-  const kind = storageKind();
-
-  if (kind === "blob") {
-    const result = await get(BLOB_PATH, { access: "private", useCache: false });
-    if (!result) return { state: EMPTY };
-    const text = await new Response(result.stream).text();
-    return { state: parse(text), etag: result.headers?.get("etag") ?? undefined };
-  }
-
-  if (kind === "file") {
-    try {
-      return { state: parse(await fs.readFile(LOCAL_PATH, "utf8")) };
-    } catch {
-      return { state: EMPTY };
-    }
-  }
-
-  return { state: memory };
-}
-
-function parse(text: string): UsageState {
-  let data: Partial<UsageState>;
-  try {
-    data = JSON.parse(text) as Partial<UsageState>;
-  } catch {
-    return EMPTY;
-  }
-  if (!data || typeof data !== "object") return EMPTY;
-
-  const entries = Array.isArray(data.entries) ? data.entries : [];
-  // Файл мог быть записан ранней версией без агрегатов — восстанавливаем
-  // их из журнала, чтобы старые данные не потерялись.
-  if (!data.totals) return { ...rebuild(entries), entries };
-
-  return { totals: data.totals, months: data.months ?? {}, entries };
-}
-
-function rebuild(entries: UsageEntry[]): { totals: UsageTotals; months: Record<string, UsageTotals> } {
-  const totals = { ...ZERO };
-  const months: Record<string, UsageTotals> = {};
-  for (const e of entries) add(totals, months, e);
-  return { totals, months };
-}
-
-function add(totals: UsageTotals, months: Record<string, UsageTotals>, entry: UsageEntry): void {
-  totals.usd += entry.costUsd;
-  totals.chars += entry.chars;
-  totals.generations += 1;
-
-  const key = entry.at.slice(0, 7);
-  const month = months[key] ?? { ...ZERO };
-  month.usd += entry.costUsd;
-  month.chars += entry.chars;
-  month.generations += 1;
-  months[key] = month;
-}
-
-/* ------------------------------- запись ------------------------------- */
-
-async function writeState(state: UsageState, etag?: string): Promise<void> {
-  const kind = storageKind();
-  const body = JSON.stringify(state, null, 2);
-
-  if (kind === "blob") {
-    await put(BLOB_PATH, body, {
-      access: "private",
-      addRandomSuffix: false,
-      allowOverwrite: true,
-      contentType: "application/json",
-      ...(etag ? { ifMatch: etag } : {}),
-    });
-    return;
-  }
-
-  if (kind === "file") {
-    await fs.mkdir(path.dirname(LOCAL_PATH), { recursive: true });
-    await fs.writeFile(LOCAL_PATH, body, "utf8");
-    return;
-  }
-
-  memory = state;
-}
-
-/**
- * Дописывает запись. На Blob используется ifMatch: если между чтением и
- * записью кто-то успел сохранить свою генерацию, повторяем цикл, иначе
- * параллельные запросы затирали бы счётчик друг друга.
- */
-export async function recordUsage(entry: UsageEntry): Promise<void> {
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const { state, etag } = await readState();
-    const totals = { ...state.totals };
-    const months = { ...state.months };
-    add(totals, months, entry);
-    const next: UsageState = {
-      totals,
-      months,
-      entries: [entry, ...state.entries].slice(0, MAX_ENTRIES),
-    };
-    try {
-      await writeState(next, etag);
-      return;
-    } catch (error) {
-      if (error instanceof BlobPreconditionFailedError && attempt < 3) continue;
-      throw error;
-    }
-  }
-}
-
-/* ------------------------------- сводка ------------------------------- */
-
-export async function readUsage(): Promise<UsageSummary> {
-  const { state } = await readState();
-  const kind = storageKind();
-  const month = state.months[new Date().toISOString().slice(0, 7)] ?? ZERO;
-  const limits = budgetLimits();
-
-  return {
-    totalUsd: state.totals.usd,
-    totalChars: state.totals.chars,
-    generations: state.totals.generations,
-    monthUsd: month.usd,
-    monthChars: month.chars,
-    budgetUsd: limits.total,
-    monthLimitUsd: limits.month,
-    storage: kind,
-    volatile: kind === "memory",
-    entries: state.entries.slice(0, 20),
-  };
-}
-
-/* ------------------------------ лимиты -------------------------------- */
-
-/**
- * Жёсткий стоп на генерацию.
+ * Раньше жил одним JSON в Blob, теперь — таблицей в Postgres: расход привязан
+ * к пользователю и проекту (B1), а агрегаты считает база, а не перезапись файла.
+ * Гонки, ради которых в версии на Blob был ifMatch, исчезли вместе с ней.
  *
- * Нужен потому, что Google на Text-to-Speech spend cap не поддерживает:
- * его бюджет умеет только присылать письма, причём с задержкой в несколько
- * часов. Без этой проверки кнопку можно нажать двести раз подряд.
- *
- * Считается по НАШЕЙ оценке стоимости, а не по счёту Google, поэтому это
- * защита от очевидного перерасхода, а не бухгалтерия до цента.
+ * Важно про точность: символы точные, мы сами их отправили. Доллары — ОЦЕНКА
+ * по нашей таблице тарифов, а не факт из счёта Google.
  */
-export function budgetLimits(): { total: number | null; month: number | null } {
+
+const positive = (raw: string | undefined): number | null => {
+  const value = Number(raw ?? "");
+  return Number.isFinite(value) && value > 0 ? value : null;
+};
+
+export function globalLimits(): { total: number | null; month: number | null } {
   return {
     total: positive(process.env.TTS_BUDGET_USD),
     month: positive(process.env.TTS_MONTHLY_LIMIT_USD),
   };
 }
 
-function positive(raw: string | undefined): number | null {
-  const value = Number(raw ?? "");
-  return Number.isFinite(value) && value > 0 ? value : null;
+const defaultUserMonthlyLimit = (): number | null =>
+  positive(process.env.TTS_USER_MONTHLY_LIMIT_USD);
+
+const monthStart = (): string => {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+};
+
+export interface RecordArgs {
+  userId: number;
+  projectId?: number;
+  kind: "script" | "audio";
+  chars: number;
+  costUsd: number;
+  tier?: string;
+  voices?: string[];
+}
+
+export async function recordUsage(entry: RecordArgs): Promise<void> {
+  const payload = await payloadClient();
+  await payload.create({
+    collection: "usage-events",
+    data: {
+      user: entry.userId,
+      project: entry.projectId,
+      kind: entry.kind,
+      chars: entry.chars,
+      costUsd: entry.costUsd,
+      tier: entry.tier,
+      voices: entry.voices,
+    },
+    overrideAccess: true,
+  });
+}
+
+/** Суммы по выборке. Постранично: строк немного, но полагаться на это нельзя. */
+async function totals(where: Record<string, unknown>): Promise<{
+  usd: number;
+  chars: number;
+  generations: number;
+}> {
+  const payload = await payloadClient();
+  let page = 1;
+  let usd = 0;
+  let chars = 0;
+  let generations = 0;
+
+  for (;;) {
+    const batch = await payload.find({
+      collection: "usage-events",
+      where: where as never,
+      limit: 500,
+      page,
+      depth: 0,
+      overrideAccess: true,
+    });
+
+    for (const row of batch.docs) {
+      usd += row.costUsd ?? 0;
+      chars += row.chars ?? 0;
+      generations += 1;
+    }
+
+    if (!batch.hasNextPage) break;
+    page += 1;
+  }
+
+  return { usd, chars, generations };
+}
+
+export async function readUsage(userId: number, isAdmin: boolean): Promise<UsageSummary> {
+  const payload = await payloadClient();
+  const since = monthStart();
+
+  const [mine, mineMonth, everyone, everyoneMonth, recent, user] = await Promise.all([
+    totals({ user: { equals: userId } }),
+    totals({ and: [{ user: { equals: userId } }, { createdAt: { greater_than_equal: since } }] }),
+    totals({}),
+    totals({ createdAt: { greater_than_equal: since } }),
+    payload.find({
+      collection: "usage-events",
+      where: { user: { equals: userId } },
+      sort: "-createdAt",
+      limit: 20,
+      depth: 0,
+      overrideAccess: true,
+    }),
+    payload.findByID({ collection: "users", id: userId, depth: 0, overrideAccess: true }),
+  ]);
+
+  const limits = globalLimits();
+  const remainingByTotal = limits.total === null ? null : limits.total - everyone.usd;
+  const remainingByMonth = limits.month === null ? null : limits.month - everyoneMonth.usd;
+  const remaining = [remainingByTotal, remainingByMonth].filter(
+    (value): value is number => value !== null,
+  );
+
+  return {
+    totalUsd: mine.usd,
+    totalChars: mine.chars,
+    generations: mine.generations,
+    monthUsd: mineMonth.usd,
+    monthChars: mineMonth.chars,
+    monthLimitUsd: user?.monthlyLimitUsd ?? defaultUserMonthlyLimit(),
+    globalRemainingUsd: remaining.length ? Math.min(...remaining) : null,
+    global: isAdmin
+      ? {
+          totalUsd: everyone.usd,
+          monthUsd: everyoneMonth.usd,
+          generations: everyone.generations,
+          budgetUsd: limits.total,
+          monthLimitUsd: limits.month,
+        }
+      : null,
+    entries: recent.docs.map(
+      (row): UsageEntry => ({
+        at: row.createdAt,
+        chars: row.chars ?? 0,
+        costUsd: row.costUsd ?? 0,
+        tier: row.tier ?? "",
+        voices: Array.isArray(row.voices) ? (row.voices as string[]) : [],
+        format: "",
+        chunks: 0,
+        seconds: 0,
+      }),
+    ),
+  };
 }

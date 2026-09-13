@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { parseScript, planSynthesis, analyzeScript, DEFAULT_CHUNK_BYTES } from "@/lib/ssml";
 import { synthesizePlan, explainError, hasCredentials, NO_CREDENTIALS } from "@/lib/google-tts";
 import { formatForVoices, estimateCostUsd, tierOf, TIER_LABEL, DEFAULT_VOICE } from "@/lib/voices";
-import { guard } from "@/lib/auth";
-import { recordUsage, readUsage, budgetBlock, budgetLimits } from "@/lib/usage";
+import { authConfigured, currentUser, NOT_CONFIGURED, UNAUTHORIZED } from "@/lib/auth";
+import { recordUsage, readUsage, budgetBlock } from "@/lib/usage";
 import type { TtsRequest } from "@/lib/api-types";
 
 export const runtime = "nodejs";
@@ -13,8 +13,12 @@ export const maxDuration = 300;
 const MAX_BILLABLE_CHARS = Number(process.env.TTS_MAX_CHARS ?? 120_000);
 
 export async function POST(request: Request) {
-  const denied = await guard();
-  if (denied) return denied;
+  if (!authConfigured()) {
+    return NextResponse.json({ error: NOT_CONFIGURED }, { status: 503 });
+  }
+
+  const user = await currentUser();
+  if (!user) return NextResponse.json({ error: UNAUTHORIZED }, { status: 401 });
 
   let body: TtsRequest;
   try {
@@ -71,25 +75,24 @@ export async function POST(request: Request) {
   const distinctVoices = [...new Set(usedVoices)];
   const pendingUsd = estimateCostUsd(billableChars, distinctVoices);
 
-  // Жёсткий стоп по бюджету. Проверяем ДО синтеза и с учётом стоимости
-  // самой заявки, иначе лимит можно было бы перешагнуть последним запросом.
-  const limits = budgetLimits();
-  if (limits.total !== null || limits.month !== null) {
-    let summary;
-    try {
-      summary = await readUsage();
-    } catch (error) {
-      // Лимит задан, а сколько потрачено — неизвестно. Отказываем: молча
-      // отключившийся предохранитель хуже временной недоступности.
-      console.error("[tts] не удалось прочитать расходы для проверки бюджета", error);
-      return NextResponse.json(
-        { error: "Не удалось проверить бюджет, генерация остановлена. Попробуйте позже." },
-        { status: 503 },
-      );
-    }
-    const blocked = budgetBlock(summary, pendingUsd);
-    if (blocked) return NextResponse.json({ error: blocked }, { status: 402 });
+  // Жёсткий стоп по бюджету. Проверяем ДО синтеза и с учётом стоимости самой
+  // заявки, иначе лимит можно было бы перешагнуть последним запросом.
+  // Отказать безопаснее, чем сосчитать: если расходы прочитать не удалось,
+  // генерация останавливается — молча отключившийся предохранитель хуже
+  // временной недоступности.
+  let summary;
+  try {
+    summary = await readUsage(user.id, user.isAdmin);
+  } catch (error) {
+    console.error("[tts] не удалось прочитать расходы для проверки бюджета", error);
+    return NextResponse.json(
+      { error: "Не удалось проверить бюджет, генерация остановлена. Попробуйте позже." },
+      { status: 503 },
+    );
   }
+
+  const blocked = budgetBlock(summary, pendingUsd);
+  if (blocked) return NextResponse.json({ error: blocked }, { status: 402 });
 
   const startedAt = Date.now();
 
@@ -109,14 +112,12 @@ export async function POST(request: Request) {
     // ошибка записи только логируется — аудио пользователь получает в любом случае.
     try {
       await recordUsage({
-        at: new Date().toISOString(),
+        userId: user.id,
+        kind: "audio",
         chars: billableChars,
         costUsd: pendingUsd,
         tier: TIER_LABEL[tierOf(defaultVoice)],
         voices: distinctVoices,
-        format,
-        chunks: speechItems.length,
-        seconds: Math.round(stats.estimatedSeconds),
       });
     } catch (error) {
       console.error("[tts] не удалось записать расход", error);

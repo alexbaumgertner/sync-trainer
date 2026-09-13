@@ -1,4 +1,6 @@
-import "server-only";
+// Без пометки server-only намеренно: модуль используют и маршруты Next,
+// и скрипты обслуживания, которые исполняются вне Next. В клиентский код он
+// не попадёт — тянет за собой Payload и доступ к базе.
 import { payloadClient } from "./payload";
 import { acceptPendingInvitation } from "./otp";
 import { generateInviteToken, hashInviteToken, inviteLink } from "./invite-token";

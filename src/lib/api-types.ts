@@ -39,17 +39,31 @@ export interface UsageTotals {
 }
 
 export interface UsageSummary {
+  /** расход текущего пользователя */
   totalUsd: number;
   totalChars: number;
   generations: number;
   monthUsd: number;
   monthChars: number;
-  /** общий потолок, TTS_BUDGET_USD */
-  budgetUsd: number | null;
-  /** месячный потолок, TTS_MONTHLY_LIMIT_USD */
+
+  /** личный месячный потолок; null — личного лимита нет */
   monthLimitUsd: number | null;
-  storage: "blob" | "file" | "memory";
-  /** счётчик не переживёт перезапуск — на Vercel без Blob-стора */
-  volatile: boolean;
+
+  /**
+   * Сколько осталось по общим лимитам сервиса. null — общих лимитов нет.
+   * Отдаём остаток, а не суммы: обычному пользователю незачем знать оборот,
+   * но кнопку гасить надо, поэтому запас он видеть должен.
+   */
+  globalRemainingUsd: number | null;
+
+  /** Полная картина по сервису. Заполняется только администратору. */
+  global: {
+    totalUsd: number;
+    monthUsd: number;
+    generations: number;
+    budgetUsd: number | null;
+    monthLimitUsd: number | null;
+  } | null;
+
   entries: UsageEntry[];
 }

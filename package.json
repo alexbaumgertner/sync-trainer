@@ -19,7 +19,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "invite": "node --import tsx scripts/invite.mjs"
+    "invite": "node --import tsx scripts/invite.mjs",
+    "migrate:usage": "node --import tsx scripts/migrate-usage.mjs"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
