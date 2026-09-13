@@ -2,6 +2,7 @@
 // и серверные действия, и скрипты обслуживания.
 import { payloadClient } from "./payload";
 import type { Project } from "@/payload-types";
+import { PRESETS } from "@/presets";
 
 /**
  * Работа с проектами. Права проверяет Payload по описанию коллекции (D1),
@@ -16,12 +17,10 @@ export const SOURCE_LANG_LABELS: Record<string, string> = {
   tr: "Türkçe",
 };
 
-export const STYLE_PRESET_LABELS: Record<string, string> = {
-  un: "ООН",
-  court: "Суд и Гаага",
-  eu: "Институты ЕС",
-  corporate: "Корпоративная конференция",
-};
+/** Подписи берутся из реестра пресетов, чтобы не расходиться с ним. */
+export const STYLE_PRESET_LABELS: Record<string, string> = Object.fromEntries(
+  PRESETS.map((preset) => [preset.id, preset.label]),
+);
 
 export const STATUS_LABELS: Record<string, string> = {
   draft: "Черновик",

@@ -16,6 +16,6 @@ export const migrations = [
   {
     up: migration_20260913_061846_invitations_optional_token.up,
     down: migration_20260913_061846_invitations_optional_token.down,
-    name: '20260913_061846_invitations_optional_token'
+    name: '20260913_061846_invitations_optional_token',
   },
 ];

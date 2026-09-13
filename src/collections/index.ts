@@ -7,13 +7,20 @@ import {
   hashInviteToken,
   inviteLink,
 } from "@/lib/invite-token";
+import { presetOptions, supportedLanguages } from "@/presets";
 
-const SOURCE_LANGS = [
-  { label: "English", value: "en" },
-  { label: "Deutsch", value: "de" },
-  { label: "Français", value: "fr" },
-  { label: "Türkçe", value: "tr" },
-];
+const LANGUAGE_LABELS: Record<string, string> = {
+  en: "English",
+  de: "Deutsch",
+  fr: "Français",
+  tr: "Türkçe",
+};
+
+// Языки и пресеты берутся из реестра: добавление пресета не требует правок здесь.
+const SOURCE_LANGS = supportedLanguages().map((value) => ({
+  label: LANGUAGE_LABELS[value] ?? value,
+  value,
+}));
 
 export const Users: CollectionConfig = {
   slug: "users",
@@ -235,12 +242,7 @@ export const Projects: CollectionConfig = {
       type: "select",
       required: true,
       defaultValue: "un",
-      options: [
-        { label: "ООН", value: "un" },
-        { label: "Суд и Гаага", value: "court" },
-        { label: "Институты ЕС", value: "eu" },
-        { label: "Корпоративная конференция", value: "corporate" },
-      ],
+      options: presetOptions(),
     },
     {
       name: "status",

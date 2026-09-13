@@ -11,7 +11,7 @@
     "smoke": "node scripts/smoke.mjs",
     "generate:types": "payload generate:types",
     "generate:importmap": "payload generate:importmap",
-    "migrate:create": "payload migrate:create",
+    "migrate:create": "payload migrate:create --forceAcceptWarning",
     "migrate": "payload migrate",
     "db:up": "docker start sync-trainer-pg || docker run -d --name sync-trainer-pg -e POSTGRES_PASSWORD=devpass -e POSTGRES_USER=dev -e POSTGRES_DB=sync_trainer -p 5434:5432 postgres:17-alpine",
     "db:down": "docker stop sync-trainer-pg",

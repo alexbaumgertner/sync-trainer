@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
-import { SOURCE_LANG_LABELS, STYLE_PRESET_LABELS } from "@/lib/projects";
+import { SOURCE_LANG_LABELS } from "@/lib/projects";
+import { PRESETS, qualityFor, supportedLanguages } from "@/presets";
 import { createProject } from "../actions";
 import AppShell from "@/components/app-shell";
 
@@ -45,10 +46,9 @@ export default async function NewProjectPage({
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Язык речи" hint="На нём будет звучать тренировочное аудио" htmlFor="sourceLang">
             <select id="sourceLang" aria-describedby="sourceLang-hint" name="sourceLang" defaultValue="en" className={inputClass}>
-              {Object.entries(SOURCE_LANG_LABELS).map(([value, label]) => (
+              {supportedLanguages().map((value) => (
                 <option key={value} value={value}>
-                  {label}
-                  {value === "en" ? "" : " — черновой пресет"}
+                  {SOURCE_LANG_LABELS[value] ?? value}
                 </option>
               ))}
             </select>
@@ -61,11 +61,12 @@ export default async function NewProjectPage({
           </Field>
         </div>
 
-        <Field label="Стилистика" hint="Определяет регистр, роли спикеров и терминологию" htmlFor="stylePreset">
+        <Field label="Стилистика" hint="Определяет регистр, роли спикеров и терминологию. Черновые пресеты не выверены носителем" htmlFor="stylePreset">
           <select id="stylePreset" aria-describedby="stylePreset-hint" name="stylePreset" defaultValue="un" className={inputClass}>
-            {Object.entries(STYLE_PRESET_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
+            {PRESETS.map((preset) => (
+              <option key={preset.id} value={preset.id}>
+                {preset.label}
+                {qualityFor(preset, "en") === "full" ? "" : " — черновой"}
               </option>
             ))}
           </select>
