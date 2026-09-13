@@ -74,13 +74,32 @@ describe("разбор ответа", () => {
     expect(generateContent).toHaveBeenCalledTimes(10);
   });
 
-  it("чинит SSML без внешнего speak, а не отклоняет генерацию", async () => {
+  it("собирает SSML из реплик, а не берёт у модели", async () => {
+    // Живой прогон показал, зачем: модель вернула разметку без меток
+    // спикеров, и материал озвучился одним голосом молча.
     generateContent.mockResolvedValueOnce(
-      reply({ ...goodScript(1), ssml: "<p>Первая реплика</p><p>Вторая</p>" }),
+      reply({ ...goodScript(1), ssml: "<p>что угодно от модели</p>" }),
     );
     const outcome = await generateScript({ preset, params: { ...params, traps: [] } });
-    expect(outcome.script.ssml.startsWith("<speak>")).toBe(true);
-    expect(outcome.script.ssml).toContain('rate="105%"');
+
+    expect(outcome.script.ssml).not.toContain("что угодно от модели");
+    expect(outcome.script.ssml.startsWith('<speak><prosody rate="105%">')).toBe(true);
+    // Метка спикера на месте — по ней нарезка раздаёт голоса
+    expect(outcome.script.ssml).toContain("<p>Moderator: ");
+    expect(outcome.script.ssml).toContain('<break time="1.5s"/>');
+  });
+
+  it("экранирует опасные символы из текста модели", async () => {
+    generateContent.mockResolvedValueOnce(
+      reply({
+        ...goodScript(1),
+        segments: [{ speaker: "M & Co", timecode: "00:00", text: "5 < 10 & \"кавычки\"" }],
+      }),
+    );
+    const outcome = await generateScript({ preset, params: { ...params, traps: [] } });
+    expect(outcome.script.ssml).toContain("&amp;");
+    expect(outcome.script.ssml).toContain("&lt;");
+    expect(outcome.script.ssml).not.toMatch(/<p>[^<]*5 < 10/);
   });
 
   it("выбрасывает пустые реплики и половинчатые термины", async () => {
@@ -129,17 +148,21 @@ describe("замечания к результату", () => {
     expect(outcome.warnings.join(" ")).toMatch(/минут вместо 20/);
   });
 
-  it("замечает отсутствие SSML — без него синтеза не будет", async () => {
-    generateContent.mockResolvedValueOnce(reply({ ...goodScript(1), ssml: "" }));
+  it("без реплик не выдумывает разметку", async () => {
+    generateContent.mockResolvedValueOnce(reply({ ...goodScript(1), segments: [] }));
     const outcome = await generateScript({ preset, params: { ...params, traps: [] } });
+    expect(outcome.script.ssml).toBe("");
     expect(outcome.warnings.join(" ")).toContain("не вернула SSML");
   });
 
-  it("замечает куски SSML сверх лимита Google", async () => {
-    const huge = `<speak><p>${"слово ".repeat(2000)}</p></speak>`;
-    generateContent.mockResolvedValueOnce(reply({ ...goodScript(1), ssml: huge }));
+  it("длинная реплика не даёт кусков сверх лимита — нарезка дробит её сама", async () => {
+    generateContent.mockResolvedValueOnce(
+      reply({
+        ...goodScript(1),
+        segments: [{ speaker: "M", timecode: "00:00", text: "слово ".repeat(3000) }],
+      }),
+    );
     const outcome = await generateScript({ preset, params: { ...params, traps: [] } });
-    // Нарезка сама дробит длинный абзац, поэтому предупреждения быть не должно
     expect(outcome.warnings.join(" ")).not.toContain("не влезают");
   });
 });

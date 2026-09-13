@@ -64,11 +64,6 @@ const RESPONSE_SCHEMA = {
         required: ["speaker", "timecode", "text"],
       },
     },
-    ssml: {
-      type: Type.STRING,
-      description:
-        "Тот же текст разметкой: <speak>, <prosody rate>, <p> на реплику, <break> между",
-    },
     glossary: {
       type: Type.ARRAY,
       items: {
@@ -82,7 +77,7 @@ const RESPONSE_SCHEMA = {
       },
     },
   },
-  required: ["title", "speakers", "segments", "ssml", "glossary"],
+  required: ["title", "speakers", "segments", "glossary"],
 } as const;
 
 export interface GenerateArgs extends PromptContext {
@@ -137,23 +132,44 @@ export async function generateScript(args: GenerateArgs): Promise<GenerationOutc
   };
 }
 
+const escapeXml = (value: string): string =>
+  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/**
+ * Собираем SSML сами из реплик, а не берём у модели.
+ *
+ * Живой прогон показал, почему: модель вернула разметку без меток спикеров,
+ * спикеры не распознались, и материал на пять минут озвучился одним голосом —
+ * молча, без единой ошибки. У нас же есть структурированные реплики с автором
+ * каждой, и собрать из них разметку надёжнее, чем просить об этом модель.
+ *
+ * Заодно снимается целый класс отказов: незакрытые теги, посторонние элементы,
+ * потерянный <speak>. Модель отвечает за содержание, разметка — наша.
+ */
+function buildSsml(segments: ScriptSegment[], rate: string): string {
+  const body = segments
+    .map((segment) => {
+      const speaker = segment.speaker?.trim();
+      const text = escapeXml(segment.text.trim());
+      // Метка спикера в тексте — то, по чему нарезка распознаёт говорящего
+      // и раздаёт голоса. В text-режиме она снимается перед синтезом.
+      return `<p>${speaker ? `${escapeXml(speaker)}: ` : ""}${text}</p>`;
+    })
+    .join('<break time="1.5s"/>');
+
+  return `<speak><prosody rate="${escapeXml(rate)}">${body}</prosody></speak>`;
+}
+
 /** Приводим ответ к пригодному виду, не доверяя модели на слово. */
 function normalize(parsed: ScriptResult, args: GenerateArgs): ScriptResult {
   const segments = (parsed.segments ?? []).filter((s) => s?.text?.trim());
   const glossary = (parsed.glossary ?? []).filter((g) => g?.source?.trim() && g?.target?.trim());
 
-  let ssml = (parsed.ssml ?? "").trim();
-  // Модель иногда отдаёт SSML без внешнего <speak> — чинится дешевле, чем
-  // отклонять всю генерацию, которая уже оплачена.
-  if (ssml && !/^<speak[\s>]/i.test(ssml)) {
-    ssml = `<speak><prosody rate="${args.params.rate}">${ssml}</prosody></speak>`;
-  }
-
   return {
     title: parsed.title?.trim() || "Без названия",
     speakers: (parsed.speakers ?? []).filter(Boolean),
     segments,
-    ssml,
+    ssml: segments.length ? buildSsml(segments, args.params.rate) : "",
     glossary,
   };
 }
