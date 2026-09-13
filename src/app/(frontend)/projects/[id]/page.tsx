@@ -10,6 +10,7 @@ import {
 import { deleteProject } from "../actions";
 import AppShell from "@/components/app-shell";
 import DangerousDelete from "@/components/dangerous-delete";
+import DocumentUpload from "@/components/document-upload";
 
 export const dynamic = "force-dynamic";
 
@@ -52,11 +53,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
       <section className="mb-8">
         <h2 className="mb-3 text-sm font-medium">Исходные документы</h2>
-        {documents.length === 0 ? (
-          <p className="text-sm text-neutral-500">
-            Документ ещё не загружен. Загрузка и генерация скрипта появятся в следующем релизе.
-          </p>
-        ) : (
+        {documents.length > 0 && (
           <ul className="divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
             {documents.map((doc) => (
               <li key={doc.id} className="flex flex-wrap items-baseline gap-x-3 py-2">
@@ -70,6 +67,12 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             ))}
           </ul>
         )}
+        <div className={documents.length > 0 ? "mt-4" : ""}>
+          <DocumentUpload
+            projectId={project.id}
+            clientUpload={Boolean(process.env.BLOB_READ_WRITE_TOKEN)}
+          />
+        </div>
       </section>
 
       <section className="mb-8">
