@@ -25,6 +25,7 @@
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
     "@google-cloud/text-to-speech": "^7.1.0",
+    "@google/genai": "^2.22.0",
     "@payloadcms/db-postgres": "^3.89.0",
     "@payloadcms/email-resend": "^3.89.0",
     "@payloadcms/next": "^3.89.0",

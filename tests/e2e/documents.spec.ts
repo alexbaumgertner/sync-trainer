@@ -97,28 +97,37 @@ test.afterAll(async () => {
   await payload.delete({ collection: "users", id: userId, overrideAccess: true }).catch(() => {});
 });
 
-test("документ разбирается, а его текст не попадает в базу", async ({ page, context }) => {
+test("параметры генерации и предупреждение об удалении видны до загрузки", async ({ page, context }) => {
   await signIn(context);
   await page.goto(`/projects/${projectId}`);
 
-  // Предупреждение об удалении оригинала должно быть видно до загрузки (F3)
+  // F3: человек должен узнать об удалении оригинала до того, как загрузит
   await expect(page.getByText(/Оригинал удаляется сразу после разбора/)).toBeVisible();
+
+  await expect(page.getByLabel("Минут")).toHaveValue("20");
+  await expect(page.getByLabel("Спикеров")).toHaveValue("5");
+  await expect(page.getByLabel("Терминов")).toHaveValue("40");
+  await expect(page.getByLabel("Темп")).toHaveValue("105%");
+  await expect(page.getByLabel("Перечисление на компрессию")).toBeChecked();
+});
+
+test("без ключа модели загрузка отказывает понятно, а не молча", async ({ page, context }) => {
+  // В сквозном прогоне ключа Gemini нет намеренно: настоящий вызов стоит денег.
+  // Проверяем, что отказ объясняет причину, а не выглядит как поломка.
+  await signIn(context);
+  await page.goto(`/projects/${projectId}`);
 
   await page.getByLabel("Файл документа").setInputFiles({
     name: "background-note.docx",
     mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    buffer: await makeDocx(SECRET),
+    buffer: await makeDocx("любой текст"),
   });
-  await page.getByRole("button", { name: "Загрузить" }).click();
+  await page.getByRole("button", { name: "Загрузить и сгенерировать" }).click();
 
-  await expect(page.getByText(/Готово\./)).toBeVisible({ timeout: 30_000 });
-  // Имя встречается и в сообщении об успехе, и в списке — нужен список
-  await expect(page.getByText("background-note.docx", { exact: true })).toBeVisible();
-  await expect(page.getByText("оригинал удалён")).toBeVisible();
+  await expect(page.getByText(/GEMINI_API_KEY не задан/)).toBeVisible({ timeout: 30_000 });
 
-  // Главное: содержимого документа нет нигде в базе (F2)
-  const hits = await findInDatabase(SECRET);
-  expect(hits, `фраза найдена в: ${hits.join(", ")}`).toEqual([]);
+  // И ничего не осталось: ни документа в карточке, ни следов в базе
+  expect(await findInDatabase("любой текст")).toEqual([]);
 });
 
 test("посторонний формат отклоняется", async ({ page, context }) => {
@@ -130,7 +139,7 @@ test("посторонний формат отклоняется", async ({ page
     mimeType: "image/png",
     buffer: Buffer.from("не документ"),
   });
-  await page.getByRole("button", { name: "Загрузить" }).click();
+  await page.getByRole("button", { name: "Загрузить и сгенерировать" }).click();
 
   await expect(page.getByText(/Поддерживаются PDF, DOCX и PPTX/)).toBeVisible();
 });

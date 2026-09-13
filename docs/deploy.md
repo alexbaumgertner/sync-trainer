@@ -28,6 +28,20 @@ IAM-роли: разрешений `texttospeech.*` не существует, �
 Ключ сервис-аккаунта обязателен, локальный `gcloud auth application-default login`
 годится только для разработки.
 
+### 1а. Gemini — генерация скрипта
+
+Ключ отдельный от Text-to-Speech: там сервис-аккаунт, здесь ключ API.
+
+```bash
+gcloud services enable generativelanguage.googleapis.com --project=interpreter-tools
+```
+
+Ключ создаётся в Google AI Studio и кладётся в `GEMINI_API_KEY`.
+
+Хорошая новость про бюджет: **для Gemini API spend cap enforcement доступен**,
+в отличие от Text-to-Speech. Если будете ставить жёсткий предел в Google —
+здесь это работает.
+
 ### Бюджет в Google
 
 Spend cap для Text-to-Speech **недоступен**: enforcement поддерживают только
@@ -108,6 +122,8 @@ Cloud Run, Cloud Run Functions, Gemini API и Vertex AI. Для озвучки �
 | `DATABASE_URI` | от интеграции | **своя, см. шаг 5** | Neon |
 | `BLOB_READ_WRITE_TOKEN` | от интеграции | своя | Blob |
 | `RESEND_API_KEY` | обязательна с T02 | обязательна | шаг 6 |
+| `GEMINI_API_KEY` | обязательна с T07 | обязательна | шаг 1а |
+| `GEMINI_MODEL` | нет | нет | по умолчанию `gemini-3.7-flash` |
 | `TTS_BUDGET_USD` | `300` | `5` | — |
 | `TTS_MONTHLY_LIMIT_USD` | `40` | `2` | общий потолок за месяц |
 | `TTS_USER_MONTHLY_LIMIT_USD` | `10` | `1` | личный потолок по умолчанию |
