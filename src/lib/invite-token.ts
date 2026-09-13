@@ -14,11 +14,26 @@ export function hashInviteToken(token: string): string {
   return crypto.createHmac("sha256", key).update(token).digest("hex");
 }
 
+/**
+ * Адрес, на который приглашённый вернётся по ссылке из письма.
+ *
+ * Порядок важен: на стенде `VERCEL_PROJECT_PRODUCTION_URL` тоже задан, и если
+ * брать его первым, приглашение, выписанное на стенде, уводит человека
+ * в продакшен — ссылка там не сработает, а проверка выглядит пройденной.
+ * Поэтому вне продакшена сначала берётся адрес самого развёртывания.
+ */
+export function appBaseUrl(): string {
+  const explicit = process.env.APP_URL?.trim();
+  if (explicit) return explicit.replace(/\/$/, "");
+
+  const host =
+    process.env.VERCEL_ENV === "production"
+      ? process.env.VERCEL_PROJECT_PRODUCTION_URL
+      : (process.env.VERCEL_BRANCH_URL ?? process.env.VERCEL_URL);
+
+  return host ? `https://${host}` : "http://localhost:3000";
+}
+
 export function inviteLink(token: string): string {
-  const base =
-    process.env.APP_URL?.replace(/\/$/, "") ??
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-      : "http://localhost:3000");
-  return `${base}/invite/${token}`;
+  return `${appBaseUrl()}/invite/${token}`;
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authConfigured, NOT_CONFIGURED } from "@/lib/auth";
-import { requestCode } from "@/lib/otp";
+import { MAIL_BROKEN, requestCode } from "@/lib/otp";
 
 export const runtime = "nodejs";
 
@@ -20,7 +20,11 @@ export async function POST(request: Request) {
   }
 
   const result = await requestCode(email, clientIp(request));
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: 429 });
+  if (!result.ok) {
+    // Предел частоты — вина обратившегося, сбой почты — наша.
+    const status = result.error === MAIL_BROKEN ? 502 : 429;
+    return NextResponse.json({ error: result.error }, { status });
+  }
 
   // Ответ одинаков и для приглашённого, и для незнакомого адреса (A4).
   return NextResponse.json({ ok: true });

@@ -6,19 +6,23 @@ import { beforeAll, afterAll, beforeEach, describe, expect, it, vi } from "vites
  */
 const sent: { to: string; subject: string; text: string }[] = [];
 
+/** Переключатель для проверки поведения при отказе почтового сервиса. */
+const mail = { fail: false };
+
 vi.mock("@/lib/email", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/email")>();
   return {
     ...actual,
     emailConfigured: () => true,
     sendEmail: async (args: { to: string; subject: string; text: string }) => {
+      if (mail.fail) throw new Error("Resend отказал: домен не подтверждён");
       sent.push(args);
     },
   };
 });
 
 const { payloadClient } = await import("@/lib/payload");
-const { requestCode, verifyCode, BAD_CODE, TOO_MANY } = await import("@/lib/otp");
+const { requestCode, verifyCode, BAD_CODE, TOO_MANY, MAIL_BROKEN } = await import("@/lib/otp");
 const { createInvitation, redeemInvitation, INVALID_INVITE } = await import("@/lib/invitations");
 
 const codeFrom = (text: string): string => text.match(/\b(\d{6})\b/)?.[1] ?? "";
@@ -35,6 +39,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   sent.length = 0;
+  mail.fail = false;
 });
 
 afterAll(async () => {
@@ -194,6 +199,27 @@ describe("вход по коду", () => {
       expect(await requestCode(email, ip)).toEqual({ ok: true });
     }
     expect(await requestCode(email, ip)).toEqual({ ok: false, error: TOO_MANY });
+
+    await cleanupEmail(email);
+  });
+
+  it("отказ почтового сервиса не выдаётся за отправленный код", async () => {
+    const email = `mailfail-${stamp()}@example.test`;
+    await createInvitation({ email });
+    sent.length = 0;
+    mail.fail = true;
+
+    // Сломанная почта — единственный случай, когда ответ отличается от «ok»:
+    // иначе человек будет ждать письма, которого не существует.
+    expect(await requestCode(email, "10.0.1.1")).toEqual({ ok: false, error: MAIL_BROKEN });
+    expect(sent).toHaveLength(0);
+
+    // И сбой не должен ломать вход после починки почты.
+    mail.fail = false;
+    expect(await requestCode(email, "10.0.1.1")).toEqual({ ok: true });
+    const code = codeFrom(sent.at(-1)!.text);
+    expect(code).toMatch(/^\d{6}$/);
+    expect((await verifyCode(email, code)).ok).toBe(true);
 
     await cleanupEmail(email);
   });

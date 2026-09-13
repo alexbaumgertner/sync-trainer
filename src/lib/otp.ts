@@ -24,6 +24,8 @@ const MIN_RESPONSE_MS = 400;
 
 export const TOO_MANY = "Слишком много попыток. Попробуйте позже.";
 export const BAD_CODE = "Код неверный или истёк.";
+export const MAIL_BROKEN =
+  "Письмо с кодом не удалось отправить. Это сбой на нашей стороне, попробуйте позже.";
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 
@@ -173,7 +175,18 @@ export async function requestCode(emailInput: string, ip: string): Promise<Reque
         overrideAccess: true,
       });
 
-      if (allowed) await sendEmail({ to: email, ...codeEmail(code) });
+      if (allowed) {
+        try {
+          await sendEmail({ to: email, ...codeEmail(code) });
+        } catch (error) {
+          // Сбой почты — это наша поломка, а не повод отвечать «код отправлен»:
+          // человек ждал бы письма, которого не будет. Оговорка к A4: во время
+          // такого сбоя ответ приглашённому и постороннему различается, но
+          // выбор между этим и молчаливо сломанным входом очевиден.
+          console.error("[otp] письмо не отправлено", error);
+          return { ok: false, error: MAIL_BROKEN };
+        }
+      }
 
       // Одинаковый ответ в обоих случаях (A4).
       return { ok: true };
