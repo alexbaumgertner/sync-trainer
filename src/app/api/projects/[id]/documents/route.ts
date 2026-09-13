@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { del } from "@vercel/blob";
+import { del, get } from "@vercel/blob";
 import { currentUser } from "@/lib/auth";
 import { payloadClient } from "@/lib/payload";
 import { extractDocument, kindOf, MAX_UPLOAD_BYTES } from "@/lib/extract";
@@ -49,7 +49,7 @@ export async function POST(
   let buffer: Buffer;
   let filename: string;
   let mime: string;
-  let blobUrl: string | null = null;
+  let blobPath: string | null = null;
   let rawParams: Record<string, unknown> = {};
 
   const contentType = request.headers.get("content-type") ?? "";
@@ -57,22 +57,33 @@ export async function POST(
   try {
     if (contentType.includes("application/json")) {
       const body = (await request.json()) as {
-        url?: string;
         pathname?: string;
         params?: Record<string, unknown>;
       };
       rawParams = body.params ?? {};
-      if (!body.url) {
-        return NextResponse.json({ error: "Не передан адрес загруженного файла." }, { status: 400 });
+      if (!body.pathname) {
+        return NextResponse.json({ error: "Не передан путь загруженного файла." }, { status: 400 });
       }
-      blobUrl = body.url;
-      const response = await fetch(body.url);
-      if (!response.ok) {
+
+      // Путь приходит из браузера, поэтому доверять ему нельзя: без этой
+      // проверки сюда можно передать путь чужого проекта, и сервер прочитает
+      // его своим токеном. Раньше здесь принимался произвольный адрес, и
+      // сервер ходил по нему сам — это ещё и SSRF.
+      const inProject = body.pathname.startsWith(`uploads/${project.id}/`);
+      const climbsOut = body.pathname.split("/").includes("..");
+      if (!inProject || climbsOut) {
+        return NextResponse.json({ error: "Путь не относится к проекту." }, { status: 400 });
+      }
+
+      blobPath = body.pathname;
+      // Приватный файл по ссылке не скачать — читаем через SDK.
+      const stored = await get(blobPath, { access: "private", useCache: false });
+      if (!stored) {
         return NextResponse.json({ error: "Загруженный файл недоступен." }, { status: 400 });
       }
-      buffer = Buffer.from(await response.arrayBuffer());
-      filename = (body.pathname ?? body.url).split("/").pop() ?? "document";
-      mime = response.headers.get("content-type") ?? "application/octet-stream";
+      buffer = Buffer.from(await new Response(stored.stream).arrayBuffer());
+      filename = blobPath.split("/").pop() ?? "document";
+      mime = stored.blob.contentType || "application/octet-stream";
     } else {
       const form = await request.formData();
       const file = form.get("file");
@@ -99,8 +110,8 @@ export async function POST(
 
   /** F1: оригинал уходит из хранилища и при успехе, и при ошибке. */
   const purgeOriginal = async () => {
-    if (!blobUrl) return;
-    await del(blobUrl).catch((error: unknown) => {
+    if (!blobPath) return;
+    await del(blobPath).catch((error: unknown) => {
       console.error("[documents] не удалось удалить оригинал", error);
     });
   };

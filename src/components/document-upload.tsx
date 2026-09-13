@@ -56,15 +56,21 @@ export default function DocumentUpload({ projectId, clientUpload }: {
 
       if (clientUpload) {
         const { upload } = await import("@vercel/blob/client");
+        // Хранилище приватное — публичная запись в него даёт 400 без
+        // CORS-заголовков, браузер показывает только «CORS», а SDK молча
+        // повторяет попытку семь раз. Отсюда и берётся вечное «Генерирую…».
         const blob = await upload(`uploads/${projectId}/${file.name}`, file, {
-          access: "public",
+          access: "private",
           handleUploadUrl: `/api/projects/${projectId}/documents/upload-token`,
           contentType: file.type || undefined,
         });
         response = await fetch(`/api/projects/${projectId}/documents`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: blob.url, pathname: blob.pathname, params }),
+          // Путь, а не ссылка: приватный файл по ссылке не скачать, сервер
+          // читает его через SDK. Путь приходит от хранилища — из-за
+          // addRandomSuffix он не равен тому, что просил браузер.
+          body: JSON.stringify({ pathname: blob.pathname, params }),
         });
       } else {
         const form = new FormData();
