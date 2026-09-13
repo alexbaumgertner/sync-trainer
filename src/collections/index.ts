@@ -140,6 +140,54 @@ export const Projects: CollectionConfig = {
     create: authenticated,
   },
   hooks: {
+    // F4: удаление проекта уносит файлы и связанные записи.
+    //
+    // Каскад обязателен и обязан идти ДО удаления самого проекта: у внешних
+    // ключей стоит SET NULL, а колонка project_id объявлена NOT NULL, поэтому
+    // проект с любым артефактом иначе не удаляется вовсе — база отклоняет
+    // операцию. Заодно здесь же собираем пути к файлам: после удаления строк
+    // взять их уже негде.
+    beforeDelete: [
+      async ({ req, id }) => {
+        const artifacts = await req.payload.find({
+          collection: "artifacts",
+          where: { project: { equals: id } },
+          limit: 1000,
+          depth: 0,
+          overrideAccess: true,
+        });
+        (req.context as Record<string, unknown>).artifactPaths = artifacts.docs
+          .map((doc) => doc.blobPath)
+          .filter(Boolean);
+
+        for (const collection of [
+          "artifacts",
+          "documents",
+          "generations",
+          "glossary-terms",
+          "debriefs",
+        ] as const) {
+          await req.payload
+            .delete({ collection, where: { project: { equals: id } }, overrideAccess: true })
+            .catch((error: unknown) => {
+              req.payload.logger.error({ err: error, collection }, "каскадное удаление не удалось");
+            });
+        }
+      },
+    ],
+    afterDelete: [
+      async ({ req, id }) => {
+        const paths = (req.context as Record<string, unknown>).artifactPaths;
+        const { deleteArtifacts, deleteProjectFolder } = await import("@/lib/artifacts");
+        try {
+          if (Array.isArray(paths) && paths.length) await deleteArtifacts(paths as string[]);
+          await deleteProjectFolder(Number(id));
+        } catch (error) {
+          // Строки уже удалены; недоступный файл не повод оставлять проект.
+          req.payload.logger.error({ err: error }, "не удалось удалить файлы проекта");
+        }
+      },
+    ],
     beforeChange: [
       ({ req, operation, data }) => {
         if (operation !== "create") return data;
