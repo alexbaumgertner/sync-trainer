@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
+import { withPayload } from "@payloadcms/next/withPayload";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Синтез 20 минут аудио идёт десятки секунд; тело ответа большое.
+  serverExternalPackages: ["@breezystack/lamejs"],
 };
 
-export default nextConfig;
+export default withPayload(nextConfig);
