@@ -76,7 +76,15 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       </section>
 
       <section className="mb-8">
-        <h2 className="mb-3 text-sm font-medium">Файлы проекта</h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-medium">Файлы проекта</h2>
+          <Link
+            href={`/projects/${project.id}/script`}
+            className="rounded-md border border-neutral-300 px-2.5 py-1 text-xs hover:border-neutral-500 dark:border-neutral-700"
+          >
+            Скрипт и озвучка
+          </Link>
+        </div>
         {files.length === 0 ? (
           <p className="text-sm text-neutral-500">
             Здесь появятся скрипт, SSML, аудио и выгрузка глоссария — всё, к чему можно

@@ -403,3 +403,120 @@ export function formatDuration(seconds: number): string {
   const s = total % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
 }
+
+/* ------------------------------------------------------------------ */
+/* Проверка перед синтезом (G2)                                        */
+/* ------------------------------------------------------------------ */
+
+/** Теги, которые Google принимает в SSML. Остальное — повод отказать заранее. */
+const ALLOWED_TAGS = new Set([
+  "speak",
+  "p",
+  "s",
+  "break",
+  "prosody",
+  "emphasis",
+  "say-as",
+  "sub",
+  "phoneme",
+  "mark",
+  "voice",
+  "audio",
+  "lang",
+  "par",
+  "seq",
+  "media",
+]);
+
+export interface SsmlValidation {
+  ok: boolean;
+  errors: string[];
+  warnings: string[];
+  /** План синтеза, если разметка пригодна */
+  plan: PlanItem[];
+  billableChars: number;
+  estimatedSeconds: number;
+}
+
+/**
+ * Проверяем разметку ДО обращения к Google: отказ после оплаченного запроса
+ * бесполезен, а ошибки здесь дешёвые и понятные.
+ */
+export function validateForSynthesis(
+  ssml: string,
+  opts: PlanOptions & { maxBytes?: number } = {},
+): SsmlValidation {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const empty = { plan: [] as PlanItem[], billableChars: 0, estimatedSeconds: 0 };
+
+  const text = ssml?.trim() ?? "";
+  if (!text) {
+    return { ok: false, errors: ["Разметка пуста — синтезировать нечего."], warnings, ...empty };
+  }
+
+  if (!/^<speak[\s>]/i.test(text)) {
+    errors.push("Разметка не начинается с <speak>.");
+  }
+  if (!/<\/speak>\s*$/i.test(text)) {
+    errors.push("Разметка не заканчивается на </speak>.");
+  }
+
+  const unknown = new Set<string>();
+  for (const match of text.matchAll(/<\/?([a-zA-Z][\w-]*)/g)) {
+    const tag = match[1].toLowerCase();
+    if (!ALLOWED_TAGS.has(tag)) unknown.add(tag);
+  }
+  if (unknown.size) {
+    errors.push(`Google не примет теги: ${[...unknown].join(", ")}.`);
+  }
+
+  // Грубая проверка парности: Google отклонит незакрытый тег, но уже за деньги.
+  for (const tag of ["speak", "prosody", "p"]) {
+    const open = (text.match(new RegExp(`<${tag}(?=[\\s>])`, "gi")) ?? []).length;
+    const close = (text.match(new RegExp(`</${tag}>`, "gi")) ?? []).length;
+    if (open !== close) {
+      errors.push(`Тег <${tag}> открыт ${open} раз, закрыт ${close}.`);
+    }
+  }
+
+  if (errors.length) return { ok: false, errors, warnings, ...empty };
+
+  let parsed: ParsedScript;
+  let plan: PlanItem[];
+  try {
+    parsed = parseScript(text);
+    plan = planSynthesis(parsed.blocks, opts);
+  } catch (error) {
+    return { ok: false, errors: [(error as Error).message], warnings, ...empty };
+  }
+
+  const speech = plan.filter((item) => item.type === "speech");
+  if (!speech.length) {
+    return {
+      ok: false,
+      errors: ["Из разметки не получилось ни одного куска для синтеза."],
+      warnings,
+      ...empty,
+    };
+  }
+
+  const oversized = speech.filter((item) => item.bytes > GOOGLE_MAX_INPUT_BYTES);
+  if (oversized.length) {
+    errors.push(
+      `${oversized.length} кусков превышают лимит Google в ${GOOGLE_MAX_INPUT_BYTES} байт.`,
+    );
+  }
+
+  const stats = analyzeScript(parsed.blocks, opts.rate ?? parsed.rate);
+  if (stats.paragraphs === 0) warnings.push("В разметке нет ни одного абзаца <p>.");
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+    plan,
+    billableChars: speech.reduce((sum, item) => sum + item.billableChars, 0),
+    estimatedSeconds: stats.estimatedSeconds,
+  };
+}
