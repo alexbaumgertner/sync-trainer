@@ -366,8 +366,18 @@ export interface ScriptStats {
   estimatedSeconds: number;
 }
 
-/** Примерно 14 символов в секунду для английской речи на скорости 100%. */
-const CHARS_PER_SECOND = 14;
+/**
+ * Символов в секунду английской речи на скорости 100%.
+ *
+ * Измерено на боевом файле 14 сентября 2026: 18195 символов речи за 1098
+ * секунд — 16.6. Прежнее значение 14 завышало оценку на 12%. Проверено и
+ * на отдельных голосах: Chirp 3 HD и Neural2 говорят с точностью до 1%
+ * одинаково, так что константа общая, а не на семейство голосов.
+ *
+ * Значение для английского. Для немецкого и французского его придётся
+ * измерить заново — длина слова у языков разная (T13).
+ */
+const CHARS_PER_SECOND = 16.6;
 
 export function analyzeScript(
   blocks: Block[],
@@ -444,6 +454,8 @@ export interface SsmlValidation {
   plan: PlanItem[];
   billableChars: number;
   estimatedSeconds: number;
+  /** темп из <prosody rate>, нужен синтезу в текстовом режиме */
+  rate: string | null;
 }
 
 /**
@@ -456,7 +468,7 @@ export function validateForSynthesis(
 ): SsmlValidation {
   const errors: string[] = [];
   const warnings: string[] = [];
-  const empty = { plan: [] as PlanItem[], billableChars: 0, estimatedSeconds: 0 };
+  const empty = { plan: [] as PlanItem[], billableChars: 0, estimatedSeconds: 0, rate: null };
 
   const text = ssml?.trim() ?? "";
   if (!text) {
@@ -528,5 +540,23 @@ export function validateForSynthesis(
     plan,
     billableChars: speech.reduce((sum, item) => sum + item.billableChars, 0),
     estimatedSeconds: stats.estimatedSeconds,
+    // В текстовом режиме разметка срезается вместе с <prosody>, и темп
+    // теряется. Отдаём его наружу, чтобы синтез передал его в audioConfig.
+    rate: opts.rate ?? parsed.rate,
   };
+}
+
+/**
+ * Темп «105%» в множитель для `audioConfig.speakingRate`.
+ *
+ * Google принимает 0.25–4.0; за границами он отказывает, а не подрезает,
+ * поэтому подрезаем сами — отказ на середине оплаченного синтеза дороже.
+ */
+export function speakingRateFrom(rate: string | null): number | undefined {
+  if (!rate) return undefined;
+  const percent = parseFloat(rate);
+  if (!Number.isFinite(percent) || percent <= 0) return undefined;
+  const value = percent / 100;
+  if (Math.abs(value - 1) < 0.001) return undefined;
+  return Math.min(4, Math.max(0.25, value));
 }

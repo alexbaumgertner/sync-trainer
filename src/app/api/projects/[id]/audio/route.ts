@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
 import { payloadClient } from "@/lib/payload";
 import { artifactPath, putArtifact, readArtifact } from "@/lib/artifacts";
-import { validateForSynthesis } from "@/lib/ssml";
+import { validateForSynthesis, speakingRateFrom } from "@/lib/ssml";
 import { synthesizePlan, explainError, hasCredentials, NO_CREDENTIALS } from "@/lib/google-tts";
 import { formatForVoices, estimateCostUsd, tierOf, TIER_LABEL, DEFAULT_VOICE } from "@/lib/voices";
 import { budgetBlock, readUsage, recordUsage } from "@/lib/usage";
@@ -121,7 +121,17 @@ export async function POST(
   });
 
   try {
-    const audio = await synthesizePlan(check.plan, { defaultVoice, speakerVoices });
+    // Темп задан в <prosody rate>. Голоса, принимающие SSML, читают его сами;
+    // у остальных разметка срезается, и темп пропадает вместе с ней — тогда
+    // он передаётся отдельным параметром. Передавать в обоих случаях нельзя:
+    // множители перемножатся, и 105% превратятся в 110%.
+    const speakingRate = format === "ssml" ? undefined : speakingRateFrom(check.rate);
+
+    const audio = await synthesizePlan(check.plan, {
+      defaultVoice,
+      speakerVoices,
+      speakingRate,
+    });
 
     // G5: пометка о синтетичности живёт и в самом файле, а не только на экране.
     const tagged = withId3(audio, {
