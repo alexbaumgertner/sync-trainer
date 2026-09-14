@@ -1,4 +1,4 @@
-import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Дефект, найденный первым боевым прогоном: темп из <prosody rate> доезжал
@@ -91,14 +91,26 @@ afterAll(async () => {
   await payload.delete({ collection: "users", id: userId, overrideAccess: true }).catch(() => {});
 });
 
+beforeEach(async () => {
+  // Предыдущий тест оставляет запись о генерации, и следующий запуск получил
+  // бы 409 «синтез уже идёт» — в бою это защита от двойной оплаты, здесь помеха.
+  const payload = await payloadClient();
+  await payload.delete({
+    collection: "generations",
+    where: { project: { equals: projectId } },
+    overrideAccess: true,
+  });
+});
+
 describe("темп доезжает до синтеза", () => {
   it("в текстовом режиме передаётся отдельным параметром", async () => {
     calls.length = 0;
     // Chirp 3 HD принимает только текст: <prosody> до него не доедет.
     const response = await synthesize({ ssml: SSML, voice: "en-GB-Chirp3-HD-Charon" });
 
-    expect(response.status).toBe(200);
-    expect(calls).toHaveLength(1);
+    // 202: синтез идёт после ответа (U3), поэтому вызова ждём, а не ожидаем сразу.
+    expect(response.status).toBe(202);
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
     expect(calls[0].format).toBe("text");
     expect(calls[0].speakingRate).toBeCloseTo(1.05, 5);
   });
@@ -109,8 +121,8 @@ describe("темп доезжает до синтеза", () => {
     // 105% превратились бы в 110%.
     const response = await synthesize({ ssml: SSML, voice: "en-GB-Neural2-B" });
 
-    expect(response.status).toBe(200);
-    expect(calls).toHaveLength(1);
+    expect(response.status).toBe(202);
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
     expect(calls[0].format).toBe("ssml");
     expect(calls[0].speakingRate).toBeUndefined();
   });
@@ -120,7 +132,8 @@ describe("темп доезжает до синтеза", () => {
     const plain = SSML.replace('rate="105%"', 'rate="100%"');
     const response = await synthesize({ ssml: plain, voice: "en-GB-Chirp3-HD-Charon" });
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(202);
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
     expect(calls[0].speakingRate).toBeUndefined();
   });
 });

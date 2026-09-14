@@ -3,6 +3,7 @@
 import { payloadClient } from "./payload";
 import type { Project } from "@/payload-types";
 import { PRESETS } from "@/presets";
+import { STALE_AFTER_MS } from "./generations";
 
 /**
  * Работа с проектами. Права проверяет Payload по описанию коллекции (D1),
@@ -39,6 +40,8 @@ export interface ProjectRow {
   status: string;
   costUsd: number;
   createdAt: string;
+  /** U3: идёт ли прямо сейчас фоновая работа — видно не заходя в проект */
+  busyWith: "script" | "audio" | null;
 }
 
 /** Список проектов пользователя со стоимостью каждого. */
@@ -65,6 +68,34 @@ export async function listProjects(userId: number): Promise<ProjectRow[]> {
     overrideAccess: true,
   });
 
+  // U3: статус фоновой работы виден в списке. Одним запросом на все проекты:
+  // по запросу на карточку — это двадцать обращений к базе на одну страницу.
+  const active = await payload.find({
+    collection: "generations",
+    where: {
+      and: [
+        { project: { in: projects.docs.map((p) => p.id) } },
+        { status: { in: ["queued", "running"] } },
+      ],
+    },
+    sort: "-createdAt",
+    limit: 200,
+    depth: 0,
+    overrideAccess: true,
+  });
+
+  const now = Date.now();
+  const busyByProject = new Map<number, "script" | "audio">();
+  for (const row of active.docs) {
+    const projectId = typeof row.project === "object" ? row.project?.id : row.project;
+    if (typeof projectId !== "number" || busyByProject.has(projectId)) continue;
+    // Оборванная работа в списке не горит: иначе «идёт синтез» останется
+    // навсегда после перезапуска развёртывания.
+    const touched = Date.parse(row.updatedAt ?? row.createdAt);
+    if (Number.isFinite(touched) && now - touched > STALE_AFTER_MS) continue;
+    busyByProject.set(projectId, row.kind as "script" | "audio");
+  }
+
   const costByProject = new Map<number, number>();
   for (const row of usage.docs) {
     const projectId = typeof row.project === "object" ? row.project?.id : row.project;
@@ -82,6 +113,7 @@ export async function listProjects(userId: number): Promise<ProjectRow[]> {
     status: project.status,
     costUsd: costByProject.get(project.id) ?? 0,
     createdAt: project.createdAt,
+    busyWith: busyByProject.get(project.id) ?? null,
   }));
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { validateForSynthesis } from "@/lib/ssml";
 import { analyzeScript, parseScript, formatDuration } from "@/lib/ssml";
@@ -35,6 +35,69 @@ export default function ScriptEditor({
   const [issues, setIssues] = useState<string[]>([]);
   const [result, setResult] = useState<{ seconds: number; costUsd: number; chunks: number } | null>(null);
   const [showSource, setShowSource] = useState(false);
+
+  /**
+   * U3: состояние синтеза живёт в базе, а не во вкладке. Поэтому страницу
+   * можно закрыть, а при открытии мы спрашиваем, не идёт ли работа, — и если
+   * идёт, продолжаем ждать так же, как если бы её запустили только что.
+   */
+  const [running, setRunning] = useState(false);
+  const [interrupted, setInterrupted] = useState<string | null>(null);
+
+  // Опрос живёт в одном эффекте и не пересоздаётся на каждое изменение
+  // состояния, поэтому текущее значение он читает через ref, а не из замыкания.
+  const runningRef = useRef(false);
+  useEffect(() => {
+    runningRef.current = running;
+  }, [running]);
+
+  // Опрос идёт, пока работа не кончилась: и при открытии страницы, и после
+  // запуска. Первый запрос — сразу, иначе вернувшийся человек видит пустоту.
+  useEffect(() => {
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/projects/${projectId}/generations`, {
+          cache: "no-store",
+        });
+        if (!alive || !response.ok) return;
+        const data = (await response.json()) as {
+          generations?: { audio?: { status: string; stale: boolean; error: string | null } };
+        };
+        const audio = data.generations?.audio;
+        const active = !!audio && (audio.status === "running" || audio.status === "queued");
+
+        if (active && !audio.stale) {
+          setRunning(true);
+          setInterrupted(null);
+          timer = setTimeout(poll, 3000);
+          return;
+        }
+
+        const wasRunning = runningRef.current;
+        setRunning(false);
+        if (audio?.stale) {
+          setInterrupted("Синтез прервался и не был доведён до конца. Запустите заново.");
+        } else if (audio?.status === "failed") {
+          setInterrupted(audio.error ?? "Синтез не удался.");
+        } else if (wasRunning && audio?.status === "done") {
+          // Файл появился, пока вкладка ждала, — страницу нужно перечитать.
+          router.refresh();
+        }
+      } catch {
+        // Сеть моргнула — не повод объявлять работу упавшей; пробуем снова.
+        if (alive) timer = setTimeout(poll, 5000);
+      }
+    };
+
+    void poll();
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [projectId, router]);
 
   useEffect(() => {
     fetch(`/api/voices?lang=${sourceLang}`)
@@ -86,14 +149,17 @@ export default function ScriptEditor({
         setIssues(data.issues ?? []);
         throw new Error(data.error ?? `HTTP ${response.status}`);
       }
+      // Ответ 202: работа только принята. Готовность узнаем опросом, а вкладку
+      // с этого момента можно закрыть.
       setResult(data);
-      router.refresh();
+      setRunning(true);
+      setInterrupted(null);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
-  }, [projectId, ssml, defaultVoice, speakerVoices, router]);
+  }, [projectId, ssml, defaultVoice, speakerVoices]);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
@@ -185,13 +251,31 @@ export default function ScriptEditor({
         <button
           type="button"
           onClick={synthesize}
-          disabled={busy || !check?.ok || !usedVoices.length}
+          disabled={busy || running || !check?.ok || !usedVoices.length}
           className="rounded-lg bg-neutral-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
         >
-          {busy
-            ? `Синтез… ${check?.plan.filter((i) => i.type === "speech").length ?? 0} запросов`
-            : "Синтезировать аудио"}
+          {running
+            ? `Синтез идёт… ${check?.plan.filter((i) => i.type === "speech").length ?? 0} запросов`
+            : busy
+              ? "Отправляю…"
+              : "Синтезировать аудио"}
         </button>
+
+        {running && (
+          <p className="mt-3 max-w-prose text-xs text-neutral-500" role="status">
+            Работа идёт на сервере — страницу можно закрыть и вернуться позже.
+            Готовый файл появится здесь сам.
+          </p>
+        )}
+
+        {interrupted && !running && (
+          <div
+            className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200"
+            role="status"
+          >
+            {interrupted}
+          </div>
+        )}
 
         {error && (
           <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">

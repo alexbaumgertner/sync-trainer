@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
 import { payloadClient } from "@/lib/payload";
-import { artifactPath, putArtifact, readArtifact } from "@/lib/artifacts";
+import { readArtifact } from "@/lib/artifacts";
 import { validateForSynthesis, speakingRateFrom } from "@/lib/ssml";
-import { synthesizePlan, explainError, hasCredentials, NO_CREDENTIALS } from "@/lib/google-tts";
-import { formatForVoices, estimateCostUsd, tierOf, TIER_LABEL, DEFAULT_VOICE } from "@/lib/voices";
-import { budgetBlock, readUsage, recordUsage } from "@/lib/usage";
-import { withId3, SYNTHETIC_NOTICE } from "@/lib/id3";
+import { hasCredentials, NO_CREDENTIALS } from "@/lib/google-tts";
+import { runAudioJob } from "@/lib/audio-job";
+import { activeGeneration, failStaleGenerations } from "@/lib/generations";
+import { runAfterResponse } from "@/lib/background";
+import { formatForVoices, estimateCostUsd, DEFAULT_VOICE } from "@/lib/voices";
+import { budgetBlock, readUsage } from "@/lib/usage";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -109,6 +111,18 @@ export async function POST(
   const blocked = budgetBlock(summary, pendingUsd);
   if (blocked) return NextResponse.json({ error: blocked }, { status: 402 });
 
+  // Второй запуск на том же проекте стоил бы ещё столько же и перезаписал бы
+  // тот же файл, поэтому идущая работа останавливает новую. Оборванные при
+  // этом помехой не считаются — их сначала закрываем отказом.
+  await failStaleGenerations(payload, projectId);
+  const running = await activeGeneration(payload, projectId, "audio");
+  if (running) {
+    return NextResponse.json(
+      { error: "Синтез уже идёт. Дождитесь окончания.", generationId: running.id },
+      { status: 409 },
+    );
+  }
+
   const generation = await payload.create({
     collection: "generations",
     data: {
@@ -120,89 +134,43 @@ export async function POST(
     overrideAccess: true,
   });
 
-  try {
-    // Темп задан в <prosody rate>. Голоса, принимающие SSML, читают его сами;
-    // у остальных разметка срезается, и темп пропадает вместе с ней — тогда
-    // он передаётся отдельным параметром. Передавать в обоих случаях нельзя:
-    // множители перемножатся, и 105% превратятся в 110%.
-    const speakingRate = format === "ssml" ? undefined : speakingRateFrom(check.rate);
+  // Темп задан в <prosody rate>. Голоса, принимающие SSML, читают его сами;
+  // у остальных разметка срезается, и темп пропадает вместе с ней — тогда
+  // он передаётся отдельным параметром. Передавать в обоих случаях нельзя:
+  // множители перемножатся, и 105% превратятся в 110%.
+  const speakingRate = format === "ssml" ? undefined : speakingRateFrom(check.rate);
 
-    const audio = await synthesizePlan(check.plan, {
+  // U3: работа продолжается после ответа, поэтому вкладку можно закрыть.
+  // Предел времени тот же, что у маршрута — `maxDuration` выше.
+  runAfterResponse(() =>
+    runAudioJob({
+      payload,
+      generationId: generation.id,
+      projectId,
+      projectTitle: project.title,
+      userId: user.id,
+      plan: check.plan,
       defaultVoice,
       speakerVoices,
       speakingRate,
-    });
-
-    // G5: пометка о синтетичности живёт и в самом файле, а не только на экране.
-    const tagged = withId3(audio, {
-      title: project.title,
-      comment: SYNTHETIC_NOTICE,
-    });
-
-    const blobPath = artifactPath(projectId, "audio.mp3");
-    const { bytes } = await putArtifact(blobPath, tagged, "audio/mpeg");
-
-    const existing = await payload.find({
-      collection: "artifacts",
-      where: { and: [{ project: { equals: projectId } }, { kind: { equals: "audio" } }] },
-      limit: 10,
-      overrideAccess: true,
-    });
-    for (const old of existing.docs) {
-      await payload.delete({ collection: "artifacts", id: old.id, overrideAccess: true });
-    }
-
-    await payload.create({
-      collection: "artifacts",
-      data: { project: projectId, generation: generation.id, kind: "audio", blobPath, bytes },
-      overrideAccess: true,
-    });
-
-    await payload.update({
-      collection: "generations",
-      id: generation.id,
-      data: {
-        status: "done",
-        model: defaultVoice,
-        chars: check.billableChars,
-        costUsd: pendingUsd,
-      },
-      overrideAccess: true,
-    });
-
-    await payload.update({
-      collection: "projects",
-      id: projectId,
-      data: { status: "ready" },
-      overrideAccess: true,
-    });
-
-    await recordUsage({
-      userId: user.id,
-      projectId,
-      kind: "audio",
-      chars: check.billableChars,
+      usedVoices,
+      billableChars: check.billableChars,
       costUsd: pendingUsd,
-      tier: TIER_LABEL[tierOf(defaultVoice)],
-      voices: usedVoices,
-    });
+    }),
+  );
 
-    return NextResponse.json({
-      bytes,
+  // 202: работа принята, но не сделана. Готовность узнаётся опросом
+  // `GET /api/projects/:id/generations`.
+  return NextResponse.json(
+    {
+      generationId: generation.id,
+      status: "running",
       chunks: check.plan.filter((item) => item.type === "speech").length,
       chars: check.billableChars,
       costUsd: pendingUsd,
       seconds: Math.round(check.estimatedSeconds),
       warnings: check.warnings,
-    });
-  } catch (error) {
-    await payload.update({
-      collection: "generations",
-      id: generation.id,
-      data: { status: "failed", error: explainError(error) },
-      overrideAccess: true,
-    });
-    console.error("[audio] синтез не удался", error);
-    return NextResponse.json({ error: explainError(error) }, { status: 502 });
-  }
+    },
+    { status: 202 },
+  );
 }

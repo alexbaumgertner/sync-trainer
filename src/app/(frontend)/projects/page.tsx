@@ -90,9 +90,21 @@ export default async function ProjectsPage() {
                     {SOURCE_LANG_LABELS[project.sourceLang] ?? project.sourceLang}
                   </td>
                   <td className="py-3 pr-4">
-                    <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-800">
-                      {STATUS_LABELS[project.status] ?? project.status}
-                    </span>
+                    {/* U3: идущая работа важнее статуса проекта — она сейчас,
+                        а статус описывает прошлое. Поэтому вытесняет его. */}
+                    {project.busyWith ? (
+                      <span className="inline-flex items-center gap-1.5 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">
+                        <span
+                          aria-hidden
+                          className="size-1.5 animate-pulse rounded-full bg-amber-500"
+                        />
+                        {project.busyWith === "audio" ? "Идёт синтез" : "Идёт генерация"}
+                      </span>
+                    ) : (
+                      <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-800">
+                        {STATUS_LABELS[project.status] ?? project.status}
+                      </span>
+                    )}
                   </td>
                   <td className="py-3 tabular-nums text-neutral-600 dark:text-neutral-300">
                     ${project.costUsd.toFixed(2)}
