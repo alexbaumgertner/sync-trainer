@@ -224,3 +224,30 @@ describe("вход по коду", () => {
     await cleanupEmail(email);
   });
 });
+
+describe("форма писем", () => {
+  it("код есть и в тексте, и в HTML — читают то одно, то другое", async () => {
+    const { codeEmail } = await import("@/lib/email");
+    const mail = codeEmail("123456");
+
+    expect(mail.text).toContain("123456");
+    expect(mail.html).toContain("123456");
+    // Код в теме видно из уведомления, но не первым символом: письмо,
+    // начинающееся с голого числа, читается как рассылка.
+    expect(mail.subject).toContain("123456");
+    expect(mail.subject).not.toMatch(/^\d/);
+    // Отправитель назван — без этого письмо неотличимо от фишинга.
+    expect(mail.html).toContain("Тренажёр синхрониста");
+  });
+
+  it("ссылка приглашения не ломает разметку", async () => {
+    const { inviteEmail } = await import("@/lib/email");
+    const mail = inviteEmail("https://booth.example/invite/a&b<c", 'заметка с "кавычками"');
+
+    expect(mail.html).toContain("a&amp;b&lt;c");
+    expect(mail.html).not.toContain("a&b<c");
+    expect(mail.html).toContain("&quot;кавычками&quot;");
+    // В тексте ссылка остаётся как есть: её копируют в адресную строку.
+    expect(mail.text).toContain("https://booth.example/invite/a&b<c");
+  });
+});

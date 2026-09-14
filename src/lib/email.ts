@@ -27,6 +27,7 @@ export async function sendEmail(args: {
   to: string;
   subject: string;
   text: string;
+  html?: string;
 }): Promise<void> {
   const service = resend();
 
@@ -42,24 +43,63 @@ export async function sendEmail(args: {
     to: args.to,
     subject: args.subject,
     text: args.text,
+    ...(args.html ? { html: args.html } : {}),
   });
 
   if (error) throw new Error(`Resend отказал: ${error.message}`);
 }
 
-export function codeEmail(code: string): { subject: string; text: string } {
+/**
+ * Письма транспортные, а не рассылка: ни отписки, ни картинок, ни трекинга.
+ *
+ * HTML-часть здесь не украшение. Голый текст с шестизначным кодом и без единого
+ * признака отправителя — это ровно форма фишинга, и первое же письмо с нового
+ * домена Gmail отправил в спам. Поэтому в письме видно, кто пишет и почему.
+ * Текстовая часть остаётся: по ней читают те, у кого HTML отключён.
+ */
+const SENDER = "Тренажёр синхрониста";
+
+const shell = (body: string, footer: string): string =>
+  [
+    '<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;',
+    'font-size:15px;line-height:1.55;color:#1a1a1a;max-width:32rem">',
+    `<p style="margin:0 0 1.25rem;font-weight:600">${SENDER}</p>`,
+    body,
+    `<p style="margin:1.75rem 0 0;font-size:13px;color:#6b6b6b">${footer}</p>`,
+    "</div>",
+  ].join("");
+
+export function codeEmail(code: string): { subject: string; text: string; html: string } {
   return {
-    subject: `${code} — код для входа`,
+    // Код в теме — его видно в уведомлении, не открывая письмо. Но не первым
+    // символом: письмо, начинающееся с голого числа, читается как рассылка.
+    subject: `Код для входа: ${code}`,
     text: [
       `Код для входа: ${code}`,
       "",
       "Он действует 10 минут и срабатывает один раз.",
       "Если вы не запрашивали вход, просто удалите это письмо.",
+      "",
+      `Это письмо отправил ${SENDER} — тренажёр для подготовки к синхронному переводу.`,
     ].join("\n"),
+    html: shell(
+      [
+        '<p style="margin:0 0 .75rem">Код для входа:</p>',
+        '<p style="margin:0 0 1.25rem;font-size:30px;font-weight:600;',
+        'letter-spacing:.18em;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">',
+        code,
+        "</p>",
+        '<p style="margin:0">Он действует 10 минут и срабатывает один раз.</p>',
+      ].join(""),
+      `Если вы не запрашивали вход, просто удалите это письмо. ${SENDER} — тренажёр для подготовки к синхронному переводу.`,
+    ),
   };
 }
 
-export function inviteEmail(link: string, note?: string): { subject: string; text: string } {
+export function inviteEmail(
+  link: string,
+  note?: string,
+): { subject: string; text: string; html: string } {
   return {
     subject: "Приглашение в тренажёр синхрониста",
     text: [
@@ -72,5 +112,21 @@ export function inviteEmail(link: string, note?: string): { subject: string; tex
     ]
       .filter(Boolean)
       .join("\n"),
+    html: shell(
+      [
+        '<p style="margin:0 0 1rem">Вас пригласили в тренажёр для подготовки к синхронному переводу.</p>',
+        note ? `<p style="margin:0 0 1rem">${escapeHtml(note)}</p>` : "",
+        `<p style="margin:0 0 1.25rem"><a href="${escapeHtml(link)}" style="display:inline-block;background:#171717;color:#fff;text-decoration:none;padding:.65rem 1.1rem;border-radius:.5rem">Принять приглашение</a></p>`,
+        `<p style="margin:0;font-size:13px;color:#6b6b6b;word-break:break-all">${escapeHtml(link)}</p>`,
+      ].join(""),
+      "Ссылка одноразовая и действует две недели. Пароль придумывать не нужно: вход по коду на почту.",
+    ),
   };
 }
+
+const escapeHtml = (value: string): string =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
