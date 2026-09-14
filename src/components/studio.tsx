@@ -465,17 +465,18 @@ function BudgetCard({
 }) {
   if (!usage) return null;
 
-  const share = usage.budgetUsd ? Math.min(usage.totalUsd / usage.budgetUsd, 1) : null;
+  const limit = usage.monthLimitUsd;
+  const share = limit ? Math.min(usage.monthUsd / limit, 1) : null;
 
   return (
     <div className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-      <h2 className="mb-3 text-sm font-medium">Бюджет</h2>
+      <h2 className="mb-3 text-sm font-medium">Ваши расходы</h2>
 
       <div className="flex items-baseline gap-2">
-        <span className="text-2xl font-semibold tabular-nums">${usage.totalUsd.toFixed(2)}</span>
-        {usage.budgetUsd && (
-          <span className="text-xs text-neutral-500">из ${usage.budgetUsd.toFixed(0)}</span>
-        )}
+        <span className="text-2xl font-semibold tabular-nums">${usage.monthUsd.toFixed(2)}</span>
+        <span className="text-xs text-neutral-500">
+          {limit ? `из $${limit.toFixed(2)} в этом месяце` : "в этом месяце"}
+        </span>
         {pending > 0 && (
           <span className="ml-auto text-xs text-neutral-500">
             эта генерация +${pending.toFixed(3)}
@@ -494,29 +495,50 @@ function BudgetCard({
 
       <dl className="mt-3 grid grid-cols-3 gap-2 text-xs text-neutral-500">
         <div>
-          <dt>В этом месяце</dt>
-          <dd className="font-medium tabular-nums text-neutral-900 dark:text-neutral-100">
-            ${usage.monthUsd.toFixed(2)}
-          </dd>
+          <dt>Всего</dt>
+          <dd className={figureClass}>${usage.totalUsd.toFixed(2)}</dd>
         </div>
         <div>
           <dt>Генераций</dt>
-          <dd className="font-medium tabular-nums text-neutral-900 dark:text-neutral-100">
-            {usage.generations}
-          </dd>
+          <dd className={figureClass}>{usage.generations}</dd>
         </div>
         <div>
           <dt>Символов</dt>
-          <dd className="font-medium tabular-nums text-neutral-900 dark:text-neutral-100">
-            {usage.totalChars.toLocaleString("ru-RU")}
-          </dd>
+          <dd className={figureClass}>{usage.totalChars.toLocaleString("ru-RU")}</dd>
         </div>
       </dl>
 
+      {usage.global && (
+        <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-neutral-200 pt-3 text-xs text-neutral-500 dark:border-neutral-800">
+          <div className="col-span-3 text-[11px] uppercase tracking-wide text-neutral-400">
+            По сервису целиком
+          </div>
+          <div>
+            <dt>За месяц</dt>
+            <dd className={figureClass}>
+              ${usage.global.monthUsd.toFixed(2)}
+              {usage.global.monthLimitUsd ? ` / $${usage.global.monthLimitUsd.toFixed(0)}` : ""}
+            </dd>
+          </div>
+          <div>
+            <dt>Всего</dt>
+            <dd className={figureClass}>
+              ${usage.global.totalUsd.toFixed(2)}
+              {usage.global.budgetUsd ? ` / $${usage.global.budgetUsd.toFixed(0)}` : ""}
+            </dd>
+          </div>
+          <div>
+            <dt>Генераций</dt>
+            <dd className={figureClass}>{usage.global.generations}</dd>
+          </div>
+        </dl>
+      )}
+
       <p className="mt-3 text-[11px] leading-relaxed text-neutral-500">
-        Символы точные — мы сами их отправили. Доллары это <strong className="font-medium">оценка</strong>{" "}
-        по нашей таблице тарифов, а не счёт Google: бесплатный лимит, скидки и изменения
-        прайса здесь не учтены. Факт смотрите в биллинге Google Cloud.
+        Символы точные — мы сами их отправили. Доллары это{" "}
+        <strong className="font-medium">оценка</strong> по нашей таблице тарифов, а не счёт
+        Google: бесплатный лимит, скидки и изменения прайса здесь не учтены. Факт смотрите
+        в биллинге Google Cloud.
       </p>
 
       {blocked && (
@@ -524,24 +546,11 @@ function BudgetCard({
           {blocked}
         </p>
       )}
-
-      {usage.monthLimitUsd !== null && (
-        <p className="mt-2 text-[11px] text-neutral-500">
-          Месячный лимит: ${usage.monthUsd.toFixed(2)} из ${usage.monthLimitUsd.toFixed(2)}.
-          По его достижении генерация останавливается.
-        </p>
-      )}
-
-      {usage.volatile && (
-        <p className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
-          Счётчик хранится в памяти и обнулится при перезапуске. Чтобы он пережил
-          деплой, подключите Vercel Blob — переменная{" "}
-          <code className="font-mono">BLOB_READ_WRITE_TOKEN</code> появится сама.
-        </p>
-      )}
     </div>
   );
 }
+
+const figureClass = "font-medium tabular-nums text-neutral-900 dark:text-neutral-100";
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (

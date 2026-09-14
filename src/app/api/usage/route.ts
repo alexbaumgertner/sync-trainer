@@ -1,16 +1,20 @@
 import { NextResponse } from "next/server";
-import { guard } from "@/lib/auth";
+import { authConfigured, currentUser, NOT_CONFIGURED, UNAUTHORIZED } from "@/lib/auth";
 import { readUsage } from "@/lib/usage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const denied = await guard();
-  if (denied) return denied;
+  if (!authConfigured()) {
+    return NextResponse.json({ error: NOT_CONFIGURED }, { status: 503 });
+  }
+
+  const user = await currentUser();
+  if (!user) return NextResponse.json({ error: UNAUTHORIZED }, { status: 401 });
 
   try {
-    return NextResponse.json(await readUsage());
+    return NextResponse.json(await readUsage(user.id, user.isAdmin));
   } catch (error) {
     console.error("[usage] read failed", error);
     return NextResponse.json(

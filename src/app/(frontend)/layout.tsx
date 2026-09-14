@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   description: "SSML-скрипт → озвучка через Google Cloud Text-to-Speech",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="ru"
