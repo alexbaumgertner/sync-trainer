@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { acceptInvitation } from "./actions";
+import { invitationIsOpen } from "@/lib/invitations";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,11 @@ export default async function InvitePage({
   const { token } = await params;
   const { failed } = await searchParams;
 
-  if (failed) {
+  // Проверка читающая: показать «уже принято» сразу честнее, чем звать
+  // нажать кнопку, которая заведомо откажет. Гасить она ничего не гасит.
+  const open = await invitationIsOpen(token);
+
+  if (failed || !open) {
     return (
       <div className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-6">
         <h1 className="text-xl font-semibold tracking-tight">Ссылка не сработала</h1>

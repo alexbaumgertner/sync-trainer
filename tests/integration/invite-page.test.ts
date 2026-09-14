@@ -78,6 +78,15 @@ const invite = async (): Promise<string> => {
   return tokenFrom(sent.at(-1)!.text);
 };
 
+/** Собирает текст из дерева React: JSON.stringify на нём падает по кольцу. */
+const textOf = (node: unknown): string => {
+  if (node === null || node === undefined || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(textOf).join(" ");
+  const props = (node as { props?: { children?: unknown } }).props;
+  return props ? textOf(props.children) : "";
+};
+
 const acceptedCount = async (token: string) => {
   const { hashInviteToken } = await import("@/lib/invite-token");
   const found = await payload.find({
@@ -131,6 +140,33 @@ describe("страница приглашения", () => {
     });
     // Ровно та ошибка, что валила страницу в бою: 500 после погашенного токена.
     expect(cookiesSet).toHaveLength(0);
+  });
+});
+
+describe("страница уже использованного приглашения", () => {
+  it("сразу говорит, что ссылка не сработала, а не зовёт нажать впустую", async () => {
+    const token = await invite();
+    await accept(token);
+
+    const page = await InvitePage({
+      params: Promise.resolve({ token }),
+      searchParams: Promise.resolve({}),
+    });
+    const text = textOf(page);
+
+    expect(text).toContain("Ссылка не сработала");
+    expect(text).not.toContain("Принять приглашение");
+  });
+
+  it("годное приглашение по-прежнему предлагает нажать", async () => {
+    const token = await invite();
+    const page = await InvitePage({
+      params: Promise.resolve({ token }),
+      searchParams: Promise.resolve({}),
+    });
+    expect(textOf(page)).toContain("Принять приглашение");
+    // И проверка его не погасила.
+    expect(await acceptedCount(token)).toBeNull();
   });
 });
 

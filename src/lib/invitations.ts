@@ -46,6 +46,30 @@ export type RedeemResult =
 export const INVALID_INVITE =
   "Ссылка недействительна. Возможно, ей уже воспользовались или истёк срок.";
 
+/**
+ * Годится ли приглашение — **не гася его**.
+ *
+ * Нужно странице: она открывается по ссылке из письма, и открывать её может
+ * почтовый сканер. Проверка обязана быть чтением, иначе одноразовый токен
+ * сгорит раньше, чем до него доберётся человек.
+ */
+export async function invitationIsOpen(token: string): Promise<boolean> {
+  if (!token) return false;
+  const payload = await payloadClient();
+
+  const found = await payload.find({
+    collection: "invitations",
+    where: { tokenHash: { equals: hashInviteToken(token) } },
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+  });
+
+  const invite = found.docs[0];
+  if (!invite || invite.acceptedAt) return false;
+  return Boolean(invite.expiresAt) && new Date(invite.expiresAt!).getTime() > Date.now();
+}
+
 /** Ссылка одноразовая: повторный переход по ней ничего не даёт. */
 export async function redeemInvitation(token: string): Promise<RedeemResult> {
   const payload = await payloadClient();
