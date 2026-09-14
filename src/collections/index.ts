@@ -413,9 +413,17 @@ export const Debriefs: CollectionConfig = {
   fields: [
     { name: "project", type: "relationship", relationTo: "projects", required: true, index: true },
     { name: "heldOn", type: "date" },
-    { name: "wentWell", type: "textarea" },
+    {
+      name: "hardest",
+      type: "textarea",
+      admin: { description: "E3: что было труднее всего — из этого растёт следующая подготовка" },
+    },
     { name: "missingTerms", type: "textarea", admin: { description: "E2: чего не хватило" } },
-    { name: "surprises", type: "textarea" },
+    {
+      name: "surprises",
+      type: "textarea",
+      admin: { description: "E3: чем событие разошлось с ожиданием" },
+    },
     {
       name: "actualPace",
       type: "select",

@@ -30,7 +30,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const detail = await getProject(Number(id), user.id);
   if (!detail) notFound();
 
-  const { project, files, documents, costUsd, glossaryCount } = detail;
+  const { project, files, documents, costUsd, glossaryCount, hasDebrief } = detail;
 
   return (
     <AppShell email={user.email} title={project.title}>
@@ -107,6 +107,21 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             ))}
           </ul>
         )}
+      </section>
+
+      <section className="mb-10">
+        <h2 className="mb-3 text-sm font-medium">После события</h2>
+        <p className="mb-3 max-w-prose text-sm text-neutral-500">
+          {hasDebrief
+            ? "Разбор сохранён. Его можно дополнить — он пойдёт в подготовку к следующему событию."
+            : "Когда событие пройдёт, отметьте, что прозвучало, и запишите, чего не хватило. Это заготовка для следующей подготовки, а не отчёт."}
+        </p>
+        <Link
+          href={`/projects/${project.id}/debrief`}
+          className="inline-block rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+        >
+          {hasDebrief ? "Открыть разбор" : "Заполнить разбор"}
+        </Link>
       </section>
 
       <section className="mb-10">

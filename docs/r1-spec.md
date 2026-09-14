@@ -73,7 +73,7 @@ https://claude.ai/code/artifact/c4ab54a8-b580-49b2-9c23-150a14d54694
 |---|---|
 | E1 | Отметка «прозвучало на событии» у каждого термина глоссария |
 | E2 | Поле для недостающих терминов, каждый попадает в глоссарий со статусом «из практики» |
-| E3 | Короткие вопросы: темп, что было труднее всего, совпадение с реальностью |
+| E3 | Короткие вопросы: темп, что было труднее всего, совпадение с реальностью. Поле в схеме — `hardest`, не `went_well`: «всё прошло хорошо» не подсказывает, что генерировать дальше |
 | E4 | Разборы прошлых проектов подмешиваются в промт следующей генерации |
 | E5 | Напоминание о разборе через день после события — **кандидат на R1.5** |
 
@@ -109,7 +109,7 @@ artifacts          id, project_id, generation_id, kind,
 glossary_terms     id, project_id, source_term, target_term, note,
                    status, proposed_by, verified_by, verified_at,
                    occurred_at_event
-debriefs           id, project_id, held_on, went_well, missing_terms,
+debriefs           id, project_id, held_on, hardest, missing_terms,
                    surprises, actual_pace, created_at
 usage_events       id, user_id, project_id, kind, chars,
                    cost_usd, created_at

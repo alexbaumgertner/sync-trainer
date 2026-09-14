@@ -145,6 +145,8 @@ export interface ProjectDetail {
   }[];
   costUsd: number;
   glossaryCount: number;
+  /** E1–E3: заполнен ли разбор — от этого зависит подпись на карточке */
+  hasDebrief: boolean;
 }
 
 /** Карточка проекта. Возвращает null, если проект чужой или не существует. */
@@ -160,7 +162,7 @@ export async function getProject(id: number, userId: number): Promise<ProjectDet
   const ownerId = typeof project?.owner === "object" ? project.owner?.id : project?.owner;
   if (!project || ownerId !== userId) return null;
 
-  const [artifacts, documents, usage, glossary] = await Promise.all([
+  const [artifacts, documents, usage, glossary, debriefs] = await Promise.all([
     payload.find({
       collection: "artifacts",
       where: { project: { equals: id } },
@@ -189,6 +191,11 @@ export async function getProject(id: number, userId: number): Promise<ProjectDet
       where: { project: { equals: id } },
       overrideAccess: true,
     }),
+    payload.count({
+      collection: "debriefs",
+      where: { project: { equals: id } },
+      overrideAccess: true,
+    }),
   ]);
 
   return {
@@ -210,5 +217,6 @@ export async function getProject(id: number, userId: number): Promise<ProjectDet
     })),
     costUsd: usage.docs.reduce((sum, row) => sum + (row.costUsd ?? 0), 0),
     glossaryCount: glossary.totalDocs,
+    hasDebrief: debriefs.totalDocs > 0,
   };
 }

@@ -116,7 +116,7 @@ describe("удаление проекта", () => {
     });
     await payload.create({
       collection: "debriefs",
-      data: { project: id, wentWell: "нормально" },
+      data: { project: id, hardest: "путались в цифрах" },
       overrideAccess: true,
     });
 

@@ -319,11 +319,17 @@ export interface Debrief {
   id: number;
   project: number | Project;
   heldOn?: string | null;
-  wentWell?: string | null;
+  /**
+   * E3: что было труднее всего — из этого растёт следующая подготовка
+   */
+  hardest?: string | null;
   /**
    * E2: чего не хватило
    */
   missingTerms?: string | null;
+  /**
+   * E3: чем событие разошлось с ожиданием
+   */
   surprises?: string | null;
   actualPace?: ('slower' | 'as-expected' | 'faster' | 'much-faster') | null;
   updatedAt: string;
@@ -602,7 +608,7 @@ export interface GlossaryTermsSelect<T extends boolean = true> {
 export interface DebriefsSelect<T extends boolean = true> {
   project?: T;
   heldOn?: T;
-  wentWell?: T;
+  hardest?: T;
   missingTerms?: T;
   surprises?: T;
   actualPace?: T;
