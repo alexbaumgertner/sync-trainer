@@ -23,11 +23,17 @@ function resend(): Resend | null {
 
 export const emailConfigured = (): boolean => Boolean(process.env.RESEND_API_KEY?.trim());
 
+export interface Attachment {
+  filename: string;
+  content: Buffer;
+}
+
 export async function sendEmail(args: {
   to: string;
   subject: string;
   text: string;
   html?: string;
+  attachments?: Attachment[];
 }): Promise<void> {
   const service = resend();
 
@@ -44,6 +50,7 @@ export async function sendEmail(args: {
     subject: args.subject,
     text: args.text,
     ...(args.html ? { html: args.html } : {}),
+    ...(args.attachments?.length ? { attachments: args.attachments } : {}),
   });
 
   if (error) throw new Error(`Resend отказал: ${error.message}`);
