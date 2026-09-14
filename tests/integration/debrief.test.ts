@@ -177,13 +177,44 @@ describe("E2 · недостающие термины", () => {
     expect(added.find((t) => t.sourceTerm === "callable capital")?.targetTerm).toBeFalsy();
   });
 
-  it("уже известный термин не задваивается", async () => {
+  it("уже известный термин не задваивается, но отмечается как прозвучавший", async () => {
+    // Живой прогон 14 сентября: человек вписал в «не хватило» два термина,
+    // которые уже были в глоссарии, — и разбор молча выбросил единственное
+    // свидетельство, что они на событии звучали.
     await save(form({ projectId: String(projectId), missingTerms: "headroom — запас" }));
 
     const headroom = (await termsOf(projectId)).filter((t) => t.sourceTerm === "headroom");
     expect(headroom).toHaveLength(1);
-    // И остался прежним: разбор не переписывает то, что уже выверено.
+    expect(headroom[0].occurredAtEvent).toBe(true);
+    // Происхождение при этом не подменяется: термин предложила модель.
     expect(headroom[0].status).toBe("suggested");
+  });
+
+  it("перевод дописывается только в пустое", async () => {
+    const payloadClientRef = await payloadClient();
+    await payloadClientRef.create({
+      collection: "glossary-terms",
+      data: { project: projectId, sourceTerm: "relay", status: "verified", targetTerm: "эстафета" },
+      overrideAccess: true,
+    });
+    await payloadClientRef.create({
+      collection: "glossary-terms",
+      data: { project: projectId, sourceTerm: "pivot", status: "suggested" },
+      overrideAccess: true,
+    });
+
+    await save(
+      form({
+        projectId: String(projectId),
+        missingTerms: "relay — перевод через посредника\npivot — язык-посредник",
+      }),
+    );
+
+    const after = await termsOf(projectId);
+    // Свой выверенный перевод разбор не затирает.
+    expect(after.find((t) => t.sourceTerm === "relay")?.targetTerm).toBe("эстафета");
+    // А пустой — дописывает: человек только что сказал, как это переводится.
+    expect(after.find((t) => t.sourceTerm === "pivot")?.targetTerm).toBe("язык-посредник");
   });
 
   it("повторное сохранение не плодит копии", async () => {

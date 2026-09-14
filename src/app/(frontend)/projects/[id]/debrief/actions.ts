@@ -100,10 +100,32 @@ export async function saveDebrief(formData: FormData): Promise<void> {
 
   // E2: недостающие термины попадают в глоссарий со статусом «из практики».
   // Они ценнее предложенных моделью: добыты на живом событии.
-  const known = new Set(terms.docs.map((term) => term.sourceTerm.trim().toLowerCase()));
+  const byTerm = new Map(terms.docs.map((term) => [term.sourceTerm.trim().toLowerCase(), term]));
+
   for (const parsed of parseMissingTerms(data.missingTerms ?? "")) {
-    if (known.has(parsed.source.toLowerCase())) continue;
-    known.add(parsed.source.toLowerCase());
+    const key = parsed.source.toLowerCase();
+    const existing = byTerm.get(key);
+
+    if (existing) {
+      // Термин уже есть в глоссарии, но человек написал, что его не хватило, —
+      // значит он прозвучал. Молча пропустить эту строку значило бы выбросить
+      // единственное свидетельство о событии, какое у нас есть.
+      const data: Record<string, unknown> = {};
+      if (!existing.occurredAtEvent) data.occurredAtEvent = true;
+      // Перевод дописываем только в пустое: свой, выверенный, затирать нельзя.
+      if (parsed.target && !existing.targetTerm?.trim()) data.targetTerm = parsed.target;
+      if (Object.keys(data).length) {
+        await payload.update({
+          collection: "glossary-terms",
+          id: existing.id,
+          data,
+          overrideAccess: true,
+        });
+      }
+      continue;
+    }
+
+    byTerm.set(key, { id: -1, sourceTerm: parsed.source } as (typeof terms.docs)[number]);
     await payload.create({
       collection: "glossary-terms",
       data: {
