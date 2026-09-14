@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { del, get } from "@vercel/blob";
+import { debriefNotesFor } from "@/lib/debrief-notes";
 import { currentUser } from "@/lib/auth";
 import { payloadClient } from "@/lib/payload";
 import { extractDocument, kindOf, MAX_UPLOAD_BYTES } from "@/lib/extract";
@@ -201,6 +202,15 @@ export async function POST(
 
     let outcome;
     try {
+      // E4: чему научили прошлые события этого переводчика. Отказ здесь не
+      // повод срывать генерацию — без выводов скрипт просто будет обычным.
+      const debriefNotes = await debriefNotesFor(payload, user.id, project.id).catch(
+        (error: unknown) => {
+          console.error("[documents] не удалось собрать выводы из разборов", error);
+          return [] as string[];
+        },
+      );
+
       outcome = await generateScript({
         preset,
         params: {
@@ -211,6 +221,7 @@ export async function POST(
         documentText: extracted.text || undefined,
         pdfBytes: extracted.pdfBytes,
         eventName: project.eventName ?? undefined,
+        debriefNotes,
       });
     } catch (error) {
       await payload.update({
