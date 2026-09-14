@@ -111,11 +111,33 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
       <section className="mb-10">
         <h2 className="mb-3 text-sm font-medium">Глоссарий</h2>
-        <p className="text-sm text-neutral-500">
-          {glossaryCount > 0
-            ? `${glossaryCount} терминов.`
-            : "Пока пуст. Заполнится при генерации скрипта."}
-        </p>
+        {glossaryCount === 0 ? (
+          <p className="text-sm text-neutral-500">Пока пуст. Заполнится при генерации скрипта.</p>
+        ) : (
+          <>
+            <p className="text-sm text-neutral-500">{glossaryCount} терминов.</p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <a
+                href={`/api/projects/${project.id}/glossary?format=xlsx`}
+                className="rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+              >
+                Для InterpretBank (XLSX)
+              </a>
+              <a
+                href={`/api/projects/${project.id}/glossary?format=csv`}
+                className="rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+              >
+                CSV
+              </a>
+            </div>
+            <p className="mt-3 max-w-prose text-xs text-neutral-500">
+              При импорте в InterpretBank отметьте <b>Exclude first row</b> — в первой строке
+              названия языков, по ним он определяет колонки. Термины, предложенные моделью и
+              никем не проверенные, помечены в колонке примечаний: в кабине они выглядят так же
+              уверенно, как выверенные, а верить им нельзя.
+            </p>
+          </>
+        )}
       </section>
 
       <div className="flex items-center justify-between border-t border-neutral-200 pt-5 dark:border-neutral-800">
