@@ -29,6 +29,19 @@ const makeUser = async (prefix: string, monthlyLimitUsd?: number) => {
 
 beforeAll(async () => {
   payload = await payloadClient();
+
+  // Расходы копятся в локальной базе от прогона к прогону, и рано или поздно
+  // съедают общий лимит сервиса — тогда он срабатывает раньше личного, и
+  // проверка личного лимита падает не потому, что он сломан. Порядок проверок
+  // в budgetBlock верный (деньги владельца важнее), поэтому чистим историю,
+  // а не подгоняем ожидания. Против боевой базы тесты запускаться отказываются
+  // (vitest.config.mts), так что это безопасно.
+  await payload.delete({
+    collection: "usage-events",
+    where: { id: { greater_than: 0 } },
+    overrideAccess: true,
+  });
+
   poor = await makeUser("poor", 1);
   rich = await makeUser("rich", 100);
 });

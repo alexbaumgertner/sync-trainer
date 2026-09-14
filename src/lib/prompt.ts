@@ -1,5 +1,5 @@
 import type { StylePreset } from "@/presets";
-import { qualityFor } from "@/presets";
+import { qualityFor, localizePreset } from "@/presets";
 
 /**
  * Сборка промта для генерации скрипта.
@@ -63,7 +63,10 @@ const LANGUAGE_NAMES: Record<string, string> = {
 const wordRange = (minutes: number): string => `${minutes * 100}–${minutes * 110}`;
 
 export function buildScriptPrompt(context: PromptContext): string {
-  const { preset, params } = context;
+  const { params } = context;
+  // Словарь и роли приводятся к языку скрипта: английские обороты посреди
+  // немецкой речи хуже, чем их отсутствие (T13).
+  const preset = localizePreset(context.preset, params.sourceLang);
   const quality = qualityFor(preset, params.sourceLang);
 
   const sections: string[] = [];
@@ -123,6 +126,8 @@ export function buildScriptPrompt(context: PromptContext): string {
     ].join("\n"),
   );
 
+  const scriptLanguage = LANGUAGE_NAMES[params.sourceLang] ?? params.sourceLang;
+
   sections.push(
     [
       "# Терминология",
@@ -130,8 +135,15 @@ export function buildScriptPrompt(context: PromptContext): string {
       `Покрой не менее ${params.termDensity} терминологических единиц, распределив их ` +
         "равномерно, а не скоплениями в одной реплике.",
       "",
-      "Характерные для этого регистра обороты:",
-      preset.vocabulary.encouraged.map((term) => `- ${term}`).join("\n"),
+      // Пустой список означает, что для этого языка словарь не выверен.
+      // Подсунуть сюда английские обороты было бы хуже, чем не давать ничего.
+      preset.vocabulary.encouraged.length
+        ? [
+            "Характерные для этого регистра обороты:",
+            preset.vocabulary.encouraged.map((term) => `- ${term}`).join("\n"),
+          ].join("\n")
+        : `Бери обороты, принятые в этом регистре на ${scriptLanguage} языке. ` +
+          "Не переводи английские клише дословно и не вставляй их как есть.",
       "",
       "Названия организаций при первом упоминании давай полностью, далее аббревиатурой.",
     ].join("\n"),

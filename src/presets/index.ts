@@ -41,3 +41,25 @@ export const supportedLanguages = (): string[] => {
   const rest = [...present].filter((lang) => !LANGUAGE_ORDER.includes(lang)).sort();
   return [...known, ...rest];
 };
+
+/**
+ * Пресет, приведённый к языку скрипта.
+ *
+ * Словарь и роли в пресете английские. Для другого языка либо берётся
+ * выверенная замена, либо не берётся ничего: английские обороты посреди
+ * немецкой речи хуже их отсутствия.
+ */
+export function localizePreset(preset: StylePreset, lang: string): StylePreset {
+  if (lang === "en") return preset;
+
+  const over = preset.perLanguage?.[lang];
+  return {
+    ...preset,
+    speakerRoles: over?.speakerRoles ?? preset.speakerRoles,
+    vocabulary: {
+      encouraged: over?.encouraged ?? [],
+      forbidden: over?.forbidden ?? [],
+    },
+    terminologySources: over?.terminologySources ?? preset.terminologySources,
+  };
+}
