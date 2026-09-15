@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { CRON_FORBIDDEN, cronAuthorized } from "@/lib/cron-auth";
 import { payloadClient } from "@/lib/payload";
 import { sendDebriefReminders, remindersConfigured } from "@/lib/debrief-reminder";
 
@@ -13,11 +14,8 @@ export const maxDuration = 300;
  * обработчик значит однажды потерять копию из-за сломавшегося письма.
  */
 export async function GET(request: Request): Promise<Response> {
-  const secret = process.env.CRON_SECRET?.trim();
-  const authorized =
-    !secret || request.headers.get("authorization") === `Bearer ${secret}`;
-  if (!authorized) {
-    return NextResponse.json({ error: "Нужен CRON_SECRET." }, { status: 401 });
+  if (!cronAuthorized(request)) {
+    return NextResponse.json({ error: CRON_FORBIDDEN }, { status: 401 });
   }
 
   if (!remindersConfigured()) {

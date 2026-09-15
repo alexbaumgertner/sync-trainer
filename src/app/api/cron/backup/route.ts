@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { CRON_FORBIDDEN, cronAuthorized } from "@/lib/cron-auth";
 import { list, put, del } from "@vercel/blob";
 import { createDump, summarize, encryptDump, backupKey } from "@/lib/backup";
 import { sendEmail, emailConfigured } from "@/lib/email";
@@ -24,11 +25,8 @@ const PREFIX = "backups/";
  * и говорит, как шифрование включить.
  */
 export async function GET(request: Request): Promise<Response> {
-  const secret = process.env.CRON_SECRET?.trim();
-  const authorized =
-    !secret || request.headers.get("authorization") === `Bearer ${secret}`;
-  if (!authorized) {
-    return NextResponse.json({ error: "Нужен CRON_SECRET." }, { status: 401 });
+  if (!cronAuthorized(request)) {
+    return NextResponse.json({ error: CRON_FORBIDDEN }, { status: 401 });
   }
 
   try {
