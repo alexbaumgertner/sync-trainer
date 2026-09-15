@@ -27,6 +27,9 @@ export default function AppShell({
           <Link href="/studio" className="underline-offset-2 hover:underline">
             Студия
           </Link>
+          <Link href="/experience" className="underline-offset-2 hover:underline">
+            Опыт
+          </Link>
           <Link href="/profile" className="underline-offset-2 hover:underline">
             Профиль
           </Link>

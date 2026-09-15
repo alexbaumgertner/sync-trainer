@@ -594,6 +594,120 @@ export const OtpCodes: CollectionConfig = {
   ],
 };
 
+/**
+ * Запись о проведённой работе (W1–W5).
+ *
+ * Не разбор. Разбор (`debriefs`) приватен и честен именно поэтому: там пишут,
+ * где сбились. Здесь — профессиональный след: что за событие, кто заказчик,
+ * кто выступал, как прошло. Смешать их значило бы заставить писать разбор
+ * с оглядкой, а осторожный разбор бесполезен для подготовки.
+ *
+ * Связь с проектом необязательная (W2). У переводчика годы конференций до
+ * тренажёра, и требовать проект — значит оставить профиль пустым в первый
+ * день, когда заполнять его и есть смысл.
+ */
+const Engagements: CollectionConfig = {
+  slug: "engagements",
+  admin: {
+    useAsTitle: "title",
+    defaultColumns: ["title", "organizer", "heldOn", "mode"],
+  },
+  access: {
+    read: ownedBy("owner"),
+    update: ownedBy("owner"),
+    delete: ownedBy("owner"),
+    create: authenticated,
+  },
+  hooks: {
+    beforeChange: [
+      ({ req, operation, data }) => {
+        if (operation !== "create") return data;
+        if (!req.user) return data;
+        // Как и у проектов: администратор может завести запись на другого,
+        // обычный пользователь — только на себя.
+        if (req.user.role === "admin") return { ...data, owner: data.owner ?? req.user.id };
+        return { ...data, owner: req.user.id };
+      },
+    ],
+  },
+  fields: [
+    {
+      name: "owner",
+      type: "relationship",
+      relationTo: "users",
+      required: true,
+      index: true,
+    },
+    {
+      name: "project",
+      type: "relationship",
+      relationTo: "projects",
+      // W2: необязательная. Запись может быть о конференции, которой
+      // в тренажёре никогда не было.
+      index: true,
+    },
+    { name: "title", type: "text", required: true },
+    { name: "organizer", type: "text", admin: { description: "W1: кто заказчик" } },
+    { name: "heldOn", type: "date", required: true },
+    { name: "location", type: "text" },
+    {
+      name: "mode",
+      type: "select",
+      required: true,
+      defaultValue: "simultaneous",
+      options: [
+        { label: "Синхронный", value: "simultaneous" },
+        { label: "Удалённый синхронный", value: "rsi" },
+        { label: "Последовательный", value: "consecutive" },
+        { label: "Шушутаж", value: "whispered" },
+      ],
+    },
+    { name: "sourceLang", type: "select", required: true, options: [...PROFILE_LANGS] },
+    { name: "targetLang", type: "select", required: true, options: [...PROFILE_LANGS] },
+    {
+      name: "wentHow",
+      type: "number",
+      min: 1,
+      max: 5,
+      admin: { description: "W5: как прошло, 1–5" },
+    },
+    {
+      name: "wentText",
+      type: "textarea",
+      admin: {
+        description:
+          "W5: не разбор. Сюда пишут то, что не стыдно показать команде",
+      },
+    },
+    {
+      name: "speakers",
+      type: "array",
+      admin: {
+        description:
+          "W4: только текст. Спикеры не пользователи сервиса, их согласия у нас нет",
+      },
+      fields: [
+        { name: "name", type: "text", required: true },
+        { name: "organization", type: "text" },
+      ],
+    },
+    {
+      name: "visibility",
+      type: "select",
+      required: true,
+      defaultValue: "team",
+      options: [
+        { label: "Только я", value: "private" },
+        { label: "Я и команда события", value: "team" },
+      ],
+      admin: {
+        description:
+          "W6. Уровень «заказчику» добавится сюда, когда появится сторона заказчика",
+      },
+    },
+  ],
+};
+
 export const collections: CollectionConfig[] = [
   Users,
   Invitations,
@@ -604,5 +718,6 @@ export const collections: CollectionConfig[] = [
   Artifacts,
   GlossaryTerms,
   Debriefs,
+  Engagements,
   UsageEvents,
 ];

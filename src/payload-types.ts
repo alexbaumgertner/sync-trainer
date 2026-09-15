@@ -76,6 +76,7 @@ export interface Config {
     artifacts: Artifact;
     'glossary-terms': GlossaryTerm;
     debriefs: Debrief;
+    engagements: Engagement;
     'usage-events': UsageEvent;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
@@ -93,6 +94,7 @@ export interface Config {
     artifacts: ArtifactsSelect<false> | ArtifactsSelect<true>;
     'glossary-terms': GlossaryTermsSelect<false> | GlossaryTermsSelect<true>;
     debriefs: DebriefsSelect<false> | DebriefsSelect<true>;
+    engagements: EngagementsSelect<false> | EngagementsSelect<true>;
     'usage-events': UsageEventsSelect<false> | UsageEventsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -373,6 +375,49 @@ export interface Debrief {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "engagements".
+ */
+export interface Engagement {
+  id: number;
+  owner: number | User;
+  project?: (number | null) | Project;
+  title: string;
+  /**
+   * W1: кто заказчик
+   */
+  organizer?: string | null;
+  heldOn: string;
+  location?: string | null;
+  mode: 'simultaneous' | 'rsi' | 'consecutive' | 'whispered';
+  sourceLang: 'ru' | 'en' | 'de' | 'fr' | 'es' | 'it' | 'pt' | 'tr' | 'zh' | 'ar' | 'uk' | 'pl';
+  targetLang: 'ru' | 'en' | 'de' | 'fr' | 'es' | 'it' | 'pt' | 'tr' | 'zh' | 'ar' | 'uk' | 'pl';
+  /**
+   * W5: как прошло, 1–5
+   */
+  wentHow?: number | null;
+  /**
+   * W5: не разбор. Сюда пишут то, что не стыдно показать команде
+   */
+  wentText?: string | null;
+  /**
+   * W4: только текст. Спикеры не пользователи сервиса, их согласия у нас нет
+   */
+  speakers?:
+    | {
+        name: string;
+        organization?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * W6. Уровень «заказчику» добавится сюда, когда появится сторона заказчика
+   */
+  visibility: 'private' | 'team';
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "usage-events".
  */
 export interface UsageEvent {
@@ -454,6 +499,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'debriefs';
         value: number | Debrief;
+      } | null)
+    | ({
+        relationTo: 'engagements';
+        value: number | Engagement;
       } | null)
     | ({
         relationTo: 'usage-events';
@@ -666,6 +715,33 @@ export interface DebriefsSelect<T extends boolean = true> {
   missingTerms?: T;
   surprises?: T;
   actualPace?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "engagements_select".
+ */
+export interface EngagementsSelect<T extends boolean = true> {
+  owner?: T;
+  project?: T;
+  title?: T;
+  organizer?: T;
+  heldOn?: T;
+  location?: T;
+  mode?: T;
+  sourceLang?: T;
+  targetLang?: T;
+  wentHow?: T;
+  wentText?: T;
+  speakers?:
+    | T
+    | {
+        name?: T;
+        organization?: T;
+        id?: T;
+      };
+  visibility?: T;
   updatedAt?: T;
   createdAt?: T;
 }
