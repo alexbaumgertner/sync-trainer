@@ -21,7 +21,8 @@
     "test:e2e:ui": "playwright test --ui",
     "invite": "node --import tsx scripts/invite.mjs",
     "migrate:usage": "node --import tsx scripts/migrate-usage.mjs",
-    "restore": "node --import tsx scripts/restore.mjs"
+    "restore": "node --import tsx scripts/restore.mjs",
+    "backup:verify": "node --import tsx scripts/backup-verify.mjs"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
