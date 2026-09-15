@@ -15,7 +15,7 @@ import { Client } from "pg";
 
 const { payloadClient } = await import("@/lib/payload");
 const { databaseUrl } = await import("@/lib/database-url");
-const { issueToken, readToken } = await import("@/lib/session");
+const { issueToken, readToken, SESSION_COOKIE } = await import("@/lib/session");
 
 const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 let payload: Awaited<ReturnType<typeof payloadClient>>;
@@ -115,5 +115,31 @@ describe("запасной вход", () => {
     const { token } = issueToken(userId);
     const tampered = token.replace(/^\d+/, String(userId + 1));
     expect(readToken(tampered)).toBeNull();
+  });
+});
+
+describe("админка", () => {
+  it("пускает только по годной подписи — проверка до отрисовки", async () => {
+    const { proxy } = await import("@/proxy");
+    const { NextRequest } = await import("next/server");
+
+    const ask = (cookie?: string) => {
+      const request = new NextRequest("https://booth.example/admin", {
+        headers: cookie ? { cookie } : {},
+      });
+      return proxy(request);
+    };
+
+    const good = issueToken(userId).token;
+
+    // Настоящий 307 до отрисовки, а не клиентский редирект поверх уже
+    // отданной оболочки админки: в странице redirect() не работает —
+    // Payload успевает отдать разметку раньше.
+    expect(ask().status).toBe(307);
+    expect(ask(`${SESSION_COOKIE}=forged-value`).status).toBe(307);
+    expect(ask(`${SESSION_COOKIE}=${good.replace(/^\d+/, "999")}`).status).toBe(307);
+
+    // Годная подпись проходит дальше.
+    expect(ask(`${SESSION_COOKIE}=${good}`).status).toBe(200);
   });
 });

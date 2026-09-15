@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import config from "@payload-config";
 import { RootPage, generatePageMetadata } from "@payloadcms/next/views";
 import { importMap } from "../importMap.js";
-import { currentUserId } from "@/lib/auth";
 
 type Args = {
   params: Promise<{ segments: string[] }>;
@@ -14,15 +12,11 @@ export const generateMetadata = ({ params, searchParams }: Args): Promise<Metada
   generatePageMetadata({ config, params, searchParams });
 
 /**
- * Вход в админку — тот же, что и в приложение: код на почту.
- *
- * Паролей нет, поэтому собственная форма входа Payload здесь показала бы
- * поле, в которое нечего вводить. Неавторизованного отправляем на наш вход;
- * после него сессионная кука откроет и админку — стратегия одна на оба.
+ * Неавторизованного сюда не пускает `src/proxy.ts` — проверка до отрисовки.
+ * В самой странице редирект не работает: Payload успевает отдать оболочку
+ * раньше, чем досчитается асинхронный компонент.
  */
-const Page = async ({ params, searchParams }: Args) => {
-  if (!(await currentUserId())) redirect("/");
-  return RootPage({ config, params, searchParams, importMap });
-};
+const Page = ({ params, searchParams }: Args) =>
+  RootPage({ config, params, searchParams, importMap });
 
 export default Page;
