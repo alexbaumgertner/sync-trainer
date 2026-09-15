@@ -92,3 +92,35 @@ describe("выбор базы", () => {
     info.mockRestore();
   });
 });
+
+describe("режим TLS", () => {
+  it("слабые режимы переписываются в verify-full", async () => {
+    // Драйвер pg сегодня и так трактует их как verify-full, но предупреждает,
+    // что в следующей мажорной версии перестанет: соединение останется
+    // зашифрованным, а защиты от подмены узла не будет.
+    for (const weak of ["require", "prefer", "verify-ca"]) {
+      process.env.DATABASE_URI = `postgresql://u:p@db.neon.tech/main?sslmode=${weak}`;
+      expect(databaseUrl()).toContain("sslmode=verify-full");
+    }
+  });
+
+  it("строгие режимы не трогаем", async () => {
+    for (const strict of ["verify-full", "disable", "no-verify"]) {
+      process.env.DATABASE_URI = `postgresql://u:p@db.neon.tech/main?sslmode=${strict}`;
+      expect(databaseUrl()).toContain(`sslmode=${strict}`);
+    }
+  });
+
+  it("строку без sslmode оставляем как есть — локальная база без TLS", () => {
+    process.env.DATABASE_URI = "postgresql://dev:pw@localhost:5434/sync_trainer";
+    expect(databaseUrl()).toBe("postgresql://dev:pw@localhost:5434/sync_trainer");
+  });
+
+  it("остальные параметры не теряются", () => {
+    process.env.DATABASE_URI =
+      "postgresql://u:p@db.neon.tech/main?sslmode=require&channel_binding=require";
+    const url = databaseUrl();
+    expect(url).toContain("channel_binding=require");
+    expect(url).toContain("sslmode=verify-full");
+  });
+});

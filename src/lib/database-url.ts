@@ -24,14 +24,52 @@ export function databaseUrl(): string {
     const value = process.env[name]?.trim();
     if (!value) continue;
 
+    const url = withStrictSsl(value);
+
     if (!announced) {
       announced = true;
-      console.info(`[db] подключение из ${name}: ${describe(value)} · отпечаток ${fingerprint(value)}`);
+      console.info(`[db] подключение из ${name}: ${describe(url)} · отпечаток ${fingerprint(url)}`);
     }
-    return value;
+    return url;
   }
 
   return "";
+}
+
+/**
+ * Явный `sslmode=verify-full`.
+ *
+ * Neon отдаёт строку с `sslmode=require`, и драйвер `pg` сегодня трактует
+ * это как `verify-full` — то есть проверяет и цепочку, и имя узла. Но он же
+ * предупреждает, что в следующей мажорной версии `require` получит семантику
+ * libpq, где сертификат не проверяется вовсе: соединение останется
+ * зашифрованным, но защиты от подмены узла не будет.
+ *
+ * Пишем то, что и так происходит, явно. Поведение сегодня не меняется,
+ * зато оно перестаёт зависеть от версии драйвера, а предупреждение уходит.
+ *
+ * `prefer` и `verify-ca` в этом списке по той же причине: драйвер трактует
+ * их так же и предупреждает о них так же.
+ */
+const WEAKER_MODES = new Set(["prefer", "require", "verify-ca"]);
+
+function withStrictSsl(connectionString: string): string {
+  try {
+    const url = new URL(connectionString);
+    const mode = url.searchParams.get("sslmode");
+
+    // Локальная база без TLS: навязывать ей проверку сертификата незачем
+    // и нечем — там его попросту нет.
+    if (!mode) return connectionString;
+    if (!WEAKER_MODES.has(mode)) return connectionString;
+
+    url.searchParams.set("sslmode", "verify-full");
+    return url.toString();
+  } catch {
+    // Строка не разбирается — не наше дело её чинить: пусть падает там,
+    // где это будет видно, а не молча здесь.
+    return connectionString;
+  }
 }
 
 /** Только узел и имя базы. Пароль в лог не попадает. */
