@@ -1,5 +1,13 @@
 import type { CollectionConfig } from "payload";
-import { adminOnly, authenticated, ownedBy, ownedByProject, ownUsage } from "@/lib/access";
+import {
+  adminOnly,
+  artifactStaysInProject,
+  authenticated,
+  ownedBy,
+  ownedByProject,
+  ownUsage,
+  withinOwnProject,
+} from "@/lib/access";
 import { otpCookieStrategy } from "@/lib/payload-strategy";
 import {
   INVITE_TTL_MS,
@@ -368,8 +376,11 @@ export const Documents: CollectionConfig = {
     read: ownedByProject,
     update: ownedByProject,
     delete: ownedByProject,
+    // Доступ на создание у Payload отвечает только «да/нет» и содержимого
+    // не видит. Владельца проекта проверяет `withinOwnProject` ниже.
     create: authenticated,
   },
+  hooks: { beforeChange: [withinOwnProject] },
   fields: [
     { name: "project", type: "relationship", relationTo: "projects", required: true, index: true },
     { name: "filename", type: "text", required: true },
@@ -397,8 +408,11 @@ export const Generations: CollectionConfig = {
     read: ownedByProject,
     update: ownedByProject,
     delete: ownedByProject,
+    // Доступ на создание у Payload отвечает только «да/нет» и содержимого
+    // не видит. Владельца проекта проверяет `withinOwnProject` ниже.
     create: authenticated,
   },
+  hooks: { beforeChange: [withinOwnProject] },
   fields: [
     { name: "project", type: "relationship", relationTo: "projects", required: true, index: true },
     {
@@ -437,8 +451,11 @@ export const Artifacts: CollectionConfig = {
     read: ownedByProject,
     update: ownedByProject,
     delete: ownedByProject,
+    // Доступ на создание у Payload отвечает только «да/нет» и содержимого
+    // не видит. Владельца проекта проверяет `withinOwnProject` ниже.
     create: authenticated,
   },
+  hooks: { beforeChange: [withinOwnProject, artifactStaysInProject] },
   fields: [
     { name: "project", type: "relationship", relationTo: "projects", required: true, index: true },
     { name: "generation", type: "relationship", relationTo: "generations" },
@@ -469,8 +486,11 @@ export const GlossaryTerms: CollectionConfig = {
     read: ownedByProject,
     update: ownedByProject,
     delete: ownedByProject,
+    // Доступ на создание у Payload отвечает только «да/нет» и содержимого
+    // не видит. Владельца проекта проверяет `withinOwnProject` ниже.
     create: authenticated,
   },
+  hooks: { beforeChange: [withinOwnProject] },
   fields: [
     { name: "project", type: "relationship", relationTo: "projects", required: true, index: true },
     { name: "sourceTerm", type: "text", required: true },
@@ -506,8 +526,11 @@ export const Debriefs: CollectionConfig = {
     read: ownedByProject,
     update: ownedByProject,
     delete: ownedByProject,
+    // Доступ на создание у Payload отвечает только «да/нет» и содержимого
+    // не видит. Владельца проекта проверяет `withinOwnProject` ниже.
     create: authenticated,
   },
+  hooks: { beforeChange: [withinOwnProject] },
   fields: [
     { name: "project", type: "relationship", relationTo: "projects", required: true, index: true },
     { name: "heldOn", type: "date" },

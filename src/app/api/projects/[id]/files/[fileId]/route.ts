@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
 import { payloadClient } from "@/lib/payload";
 import { readArtifact } from "@/lib/artifacts";
+import { insideProject } from "@/lib/artifact-path";
 
 export const runtime = "nodejs";
 
@@ -42,6 +43,20 @@ export async function GET(
 
   const projectId = typeof artifact?.project === "object" ? artifact.project?.id : artifact?.project;
   if (!artifact || projectId !== Number(id)) {
+    return NextResponse.json({ error: "Файл не найден." }, { status: 404 });
+  }
+
+  // Второй заслон, независимый от первого (Б2 аудита). Проверка выше говорит
+  // лишь то, что СТРОКА лежит в вашем проекте; путь в ней — отдельные данные,
+  // и записать их когда-то смог посторонний. Коллекция теперь такой путь не
+  // принимает, но маршрут отдаёт файл и обязан убедиться сам: между записью
+  // и чтением лежат годы и чужие правки.
+  if (!insideProject(artifact.blobPath, id)) {
+    console.error("[files] путь артефакта вне проекта", {
+      artifact: artifact.id,
+      project: id,
+      blobPath: artifact.blobPath,
+    });
     return NextResponse.json({ error: "Файл не найден." }, { status: 404 });
   }
 

@@ -3,6 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { del, get, put } from "@vercel/blob";
+import { artifactPath } from "./artifact-path";
 
 /**
  * Файлы проектов: скрипты, SSML, аудио, выгрузки глоссария.
@@ -16,8 +17,8 @@ const localRoot = () => path.join(process.cwd(), ".data", "artifacts");
 
 const blobEnabled = (): boolean => Boolean(process.env.BLOB_READ_WRITE_TOKEN?.trim());
 
-export const artifactPath = (projectId: number, name: string): string =>
-  `projects/${projectId}/${name}`;
+// Форма пути живёт в `artifact-path.ts`: её же проверяет слой доступа.
+export { artifactPath };
 
 export async function putArtifact(
   blobPath: string,
