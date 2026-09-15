@@ -4,6 +4,8 @@ import { currentUser } from "@/lib/auth";
 import { payloadClient } from "@/lib/payload";
 import AppShell from "@/components/app-shell";
 import { profileView, profileIsEmpty, pairLabel } from "@/lib/profile";
+import { visibleEngagements } from "@/lib/profile-engagements";
+import { MODE_LABELS, formatHeld } from "@/lib/engagements";
 
 export const dynamic = "force-dynamic";
 
@@ -36,10 +38,18 @@ export default async function ColleagueProfilePage({
   if (!person) notFound();
 
   const view = profileView(person, viewer.id);
+  const work = await visibleEngagements(payload, userId, viewer.id);
 
   return (
     <AppShell email={viewer.email} title={view.displayName}>
-      {profileIsEmpty(view) ? (
+      {work.total > 0 && (
+        <p className="mb-6 text-sm text-neutral-500">
+          {work.total} {work.total % 10 === 1 && work.total % 100 !== 11 ? "запись" : "записей"}
+          {work.sinceYear !== null && ` · с ${work.sinceYear} года`}
+        </p>
+      )}
+
+      {profileIsEmpty(view) && work.total === 0 ? (
         <p className="text-sm text-neutral-500">
           Профиль пока не заполнен или закрыт.
         </p>
@@ -89,6 +99,31 @@ export default async function ColleagueProfilePage({
             </div>
           )}
         </dl>
+      )}
+
+      {work.rows.length > 0 && (
+        <section className="mt-10">
+          <h2 className="mb-3 text-sm font-medium">Работа</h2>
+          <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
+            {work.rows.map((row) => (
+              <li key={row.id} className="py-3">
+                <div className="flex flex-wrap items-baseline gap-x-3">
+                  <span className="font-medium">{row.title}</span>
+                  {row.organizer && (
+                    <span className="text-sm text-neutral-500">{row.organizer}</span>
+                  )}
+                  <span className="ml-auto text-xs tabular-nums text-neutral-500">
+                    {formatHeld(row.heldOn)}
+                  </span>
+                </div>
+                <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-neutral-500">
+                  <span>{MODE_LABELS[row.mode] ?? row.mode}</span>
+                  {row.location && <span>{row.location}</span>}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       <div className="mt-8 border-t border-neutral-200 pt-5 dark:border-neutral-800">

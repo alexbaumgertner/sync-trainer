@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
 import { payloadClient } from "@/lib/payload";
@@ -43,6 +44,13 @@ export default async function ProfilePage({
           Профиль сохранён.
         </p>
       )}
+
+      <p className="mb-6 text-sm text-neutral-500">
+        Записи о работе живут в разделе{" "}
+        <Link href="/experience" className="underline underline-offset-2">Опыт</Link>. В карточке
+        коллега увидит только те, что открыты команде и где он назван, — витрина
+        не показывает больше, чем сама запись.
+      </p>
 
       <ProfileForm
         initial={{
