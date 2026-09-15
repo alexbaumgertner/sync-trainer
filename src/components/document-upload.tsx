@@ -70,7 +70,8 @@ export default function DocumentUpload({ projectId, clientUpload }: {
           // Путь, а не ссылка: приватный файл по ссылке не скачать, сервер
           // читает его через SDK. Путь приходит от хранилища — из-за
           // addRandomSuffix он не равен тому, что просил браузер.
-          body: JSON.stringify({ pathname: blob.pathname, params }),
+          // Имя отдаём своё: в пути хранилища к нему приклеен случайный суффикс.
+          body: JSON.stringify({ pathname: blob.pathname, filename: file.name, params }),
         });
       } else {
         const form = new FormData();

@@ -239,3 +239,72 @@ describe("полный путь документа", () => {
     expect(generateContent).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Найдено живым использованием 15 сентября: человек сгенерировал скрипт
+ * дважды, и на карточке проекта появились два «Скрипта» разного размера,
+ * оба ведущие на один файл, а в глоссарии задвоились термины.
+ */
+describe("повторная генерация", () => {
+  const reply = (terms: { source: string; target: string }[]) => ({
+    ...modelReply,
+    glossary: terms,
+  });
+
+  const generateWith = async (terms: { source: string; target: string }[]) => {
+    generateContent.mockReset();
+    generateContent.mockResolvedValueOnce({
+      text: JSON.stringify(reply(terms)),
+      usageMetadata: { promptTokenCount: 20000, candidatesTokenCount: 4000 },
+    });
+    return upload(
+      await makeDocx(`повтор ${Math.random()}`),
+      "Концепт-нота.docx",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+  };
+
+  it("не плодит записи о файлах: путь один, значит и строка одна", async () => {
+    expect((await generateWith([{ source: "alpha", target: "альфа" }])).status).toBe(200);
+    expect((await generateWith([{ source: "beta", target: "бета" }])).status).toBe(200);
+
+    const artifacts = await payload.find({
+      collection: "artifacts",
+      where: { project: { equals: projectId } },
+      limit: 50,
+      overrideAccess: true,
+    });
+
+    const paths = artifacts.docs.map((a) => a.blobPath);
+    // Два «Скрипта» на один путь — это не два файла, а список, который врёт:
+    // обе строки отдают одно и то же, но показывают разный размер.
+    expect(new Set(paths).size).toBe(paths.length);
+  });
+
+  it("не задваивает термины глоссария", async () => {
+    await generateWith([
+      { source: "headroom", target: "запас" },
+      { source: "graduation", target: "утрата права" },
+    ]);
+    await generateWith([
+      { source: "headroom", target: "другой перевод" },
+      { source: "rechannelling", target: "перенаправление" },
+    ]);
+
+    const terms = await payload.find({
+      collection: "glossary-terms",
+      where: { project: { equals: projectId } },
+      limit: 200,
+      overrideAccess: true,
+    });
+
+    const sources = terms.docs.map((t) => t.sourceTerm.toLowerCase());
+    expect(new Set(sources).size).toBe(sources.length);
+
+    // Существующий перевод не переписан: он мог быть выверен человеком,
+    // а это ценнее свежей догадки модели.
+    const headroom = terms.docs.find((t) => t.sourceTerm.toLowerCase() === "headroom");
+    expect(headroom?.targetTerm).toBe("запас");
+  });
+
+});

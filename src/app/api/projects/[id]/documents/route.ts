@@ -59,6 +59,7 @@ export async function POST(
     if (contentType.includes("application/json")) {
       const body = (await request.json()) as {
         pathname?: string;
+        filename?: string;
         params?: Record<string, unknown>;
       };
       rawParams = body.params ?? {};
@@ -83,7 +84,10 @@ export async function POST(
         return NextResponse.json({ error: "Загруженный файл недоступен." }, { status: 400 });
       }
       buffer = Buffer.from(await new Response(stored.stream).arrayBuffer());
-      filename = blobPath.split("/").pop() ?? "document";
+      // Показываем имя, которое выбрал человек, а не путь в хранилище: к пути
+      // приклеен случайный суффикс (`addRandomSuffix`), и в списке документов
+      // он выглядел как часть названия файла.
+      filename = safeFilename(body.filename) ?? blobPath.split("/").pop() ?? "document";
       mime = stored.blob.contentType || "application/octet-stream";
     } else {
       const form = await request.formData();
@@ -92,7 +96,7 @@ export async function POST(
         return NextResponse.json({ error: "Файл не передан." }, { status: 400 });
       }
       buffer = Buffer.from(await file.arrayBuffer());
-      filename = file.name;
+      filename = safeFilename(file.name) ?? "document";
       mime = file.type;
       rawParams = {
         durationMin: form.get("durationMin"),
@@ -244,6 +248,26 @@ export async function POST(
       { kind: "glossary", body: glossaryToCsv(script), type: "text/csv" },
     ];
 
+    // Пути артефактов постоянны (`projects/3/script.md`), и вторая генерация
+    // перезаписывает файл. Прежние строки после этого указывают на новый файл,
+    // но показывают старый размер — список врёт о том, что скачаешь. Поэтому
+    // старые записи убираем, как это делает озвучка.
+    const stale = await payload.find({
+      collection: "artifacts",
+      where: {
+        and: [
+          { project: { equals: project.id } },
+          { kind: { in: ["script", "ssml", "glossary"] } },
+        ],
+      },
+      limit: 100,
+      depth: 0,
+      overrideAccess: true,
+    });
+    for (const old of stale.docs) {
+      await payload.delete({ collection: "artifacts", id: old.id, overrideAccess: true });
+    }
+
     for (const file of files) {
       if (!file.body) continue;
       const blobPath = artifactPath(project.id, `${file.kind}.${file.kind === "glossary" ? "csv" : file.kind === "ssml" ? "ssml" : "md"}`);
@@ -255,7 +279,26 @@ export async function POST(
       });
     }
 
+    // Термин, уже лежащий в глоссарии, второй раз не заводим: при повторной
+    // генерации он уехал бы в выгрузку для кабины дважды. И не переписываем:
+    // существующий мог быть выверен человеком или добыт на событии, а это
+    // ценнее свежей догадки модели.
+    const known = new Set(
+      (
+        await payload.find({
+          collection: "glossary-terms",
+          where: { project: { equals: project.id } },
+          limit: 5000,
+          depth: 0,
+          overrideAccess: true,
+        })
+      ).docs.map((term) => term.sourceTerm.trim().toLowerCase()),
+    );
+
     for (const item of script.glossary) {
+      const key = item.source.trim().toLowerCase();
+      if (!key || known.has(key)) continue;
+      known.add(key);
       await payload.create({
         collection: "glossary-terms",
         data: {
@@ -317,6 +360,21 @@ export async function POST(
       { status: 422 },
     );
   }
+}
+
+/**
+ * Имя файла приходит из браузера и показывается в списке документов.
+ * Разделители пути и управляющие символы убираем: на экран они попасть
+ * не должны, а длину подрезаем, чтобы строка не разъезжалась.
+ */
+function safeFilename(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const clean = raw
+    .replace(/[\\/]/g, "-")
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .trim()
+    .slice(0, 180);
+  return clean || null;
 }
 
 const clamp = (value: number, min: number, max: number, fallback: number): number =>

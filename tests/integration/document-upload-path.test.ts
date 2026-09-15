@@ -9,13 +9,21 @@ import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
 
 const blobCalls: string[] = [];
 
+/** Когда задано — `get` отдаёт эти байты вместо отказа. */
+let storedBytes: Buffer | null = null;
+
 vi.mock("@vercel/blob", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@vercel/blob")>();
   return {
     ...actual,
     get: async (path: string) => {
       blobCalls.push(path);
-      return null;
+      if (!storedBytes) return null;
+      return {
+        statusCode: 200 as const,
+        stream: new Response(new Uint8Array(storedBytes)).body,
+        blob: { contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+      };
     },
     del: async () => {},
   };
@@ -82,6 +90,73 @@ afterAll(async () => {
     await payload.delete({ collection: "projects", id, overrideAccess: true }).catch(() => {});
   }
   await payload.delete({ collection: "users", id: userId, overrideAccess: true }).catch(() => {});
+});
+
+/**
+ * Найдено живым использованием: к пути в хранилище приклеен случайный суффикс
+ * (`addRandomSuffix`), и он показывался человеку как часть названия файла —
+ * «Концепт-нота-GGBuGU8DFs7mZty1IaY9rZKikCRhHT.pdf».
+ */
+describe("имя файла в списке документов", () => {
+  it("берётся от браузера, а не из пути в хранилище", async () => {
+    const JSZip = (await import("jszip")).default;
+    const zip = new JSZip();
+    zip.file("[Content_Types].xml", '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+    zip.folder("_rels")!.file(".rels", '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+    zip.folder("word")!.file("document.xml", '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>текст</w:t></w:r></w:p></w:body></w:document>');
+    storedBytes = await zip.generateAsync({ type: "nodebuffer" });
+
+    // Ключа модели в тесте нет — генерация остановится на этом, но запись
+    // о документе к тому моменту уже создана, а нас интересует её имя.
+    await post(ownProject, {
+      pathname: `uploads/${ownProject}/Концепт-нота-GGBuGU8DFs7mZty1IaY9rZKikCRhHT.docx`,
+      filename: "Концепт-нота.docx",
+      params: {},
+    });
+
+    const payload = await payloadClient();
+    const documents = await payload.find({
+      collection: "documents",
+      where: { project: { equals: ownProject } },
+      sort: "-createdAt",
+      limit: 1,
+      overrideAccess: true,
+    });
+
+    expect(documents.docs[0]?.filename).toBe("Концепт-нота.docx");
+    storedBytes = null;
+  });
+
+  it("разделители пути и управляющие символы в имени обезвреживаются", async () => {
+    const JSZip = (await import("jszip")).default;
+    const zip = new JSZip();
+    zip.file("[Content_Types].xml", '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+    zip.folder("_rels")!.file(".rels", '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+    zip.folder("word")!.file("document.xml", '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>текст</w:t></w:r></w:p></w:body></w:document>');
+    storedBytes = await zip.generateAsync({ type: "nodebuffer" });
+
+    // Имя приходит из браузера и попадает человеку на экран.
+    await post(ownProject, {
+      pathname: `uploads/${ownProject}/ok.docx`,
+      filename: "../../etc/passwd\u0007.docx",
+      params: {},
+    });
+
+    const payload = await payloadClient();
+    const documents = await payload.find({
+      collection: "documents",
+      where: { project: { equals: ownProject } },
+      sort: "-createdAt",
+      limit: 1,
+      overrideAccess: true,
+    });
+
+    const name = documents.docs[0]?.filename ?? "";
+    expect(name).not.toContain("/");
+    expect(name).not.toMatch(/[\u0000-\u001f]/);
+    expect(name).toContain("passwd");
+    storedBytes = null;
+  });
 });
 
 describe("путь загруженного файла", () => {
