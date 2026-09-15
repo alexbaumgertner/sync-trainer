@@ -24,7 +24,8 @@
     "restore": "node --import tsx scripts/restore.mjs",
     "backup:verify": "node --import tsx scripts/backup-verify.mjs",
     "session": "node --import tsx scripts/session.mjs",
-    "admin": "node --import tsx scripts/admin.mjs"
+    "admin": "node --import tsx scripts/admin.mjs",
+    "metrics": "node --import tsx scripts/metrics.mjs"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
@@ -35,6 +36,7 @@
     "@payloadcms/next": "^3.89.0",
     "@payloadcms/richtext-lexical": "^3.89.0",
     "@payloadcms/storage-vercel-blob": "^3.89.0",
+    "@vercel/analytics": "^2.0.1",
     "@vercel/blob": "^2.8.0",
     "graphql": "^16.14.2",
     "jszip": "^3.10.2",

@@ -78,6 +78,7 @@ export interface Config {
     debriefs: Debrief;
     engagements: Engagement;
     'usage-events': UsageEvent;
+    activity: Activity;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -96,6 +97,7 @@ export interface Config {
     debriefs: DebriefsSelect<false> | DebriefsSelect<true>;
     engagements: EngagementsSelect<false> | EngagementsSelect<true>;
     'usage-events': UsageEventsSelect<false> | UsageEventsSelect<true>;
+    activity: ActivitySelect<false> | ActivitySelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -466,6 +468,27 @@ export interface UsageEvent {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "activity".
+ */
+export interface Activity {
+  id: number;
+  user: number | User;
+  project?: (number | null) | Project;
+  step:
+    | 'project_created'
+    | 'document_uploaded'
+    | 'script_generated'
+    | 'audio_generated'
+    | 'glossary_exported'
+    | 'debrief_filled'
+    | 'engagement_created'
+    | 'invite_sent'
+    | 'invite_accepted';
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
@@ -531,6 +554,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'usage-events';
         value: number | UsageEvent;
+      } | null)
+    | ({
+        relationTo: 'activity';
+        value: number | Activity;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -793,6 +820,17 @@ export interface UsageEventsSelect<T extends boolean = true> {
   costUsd?: T;
   tier?: T;
   voices?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "activity_select".
+ */
+export interface ActivitySelect<T extends boolean = true> {
+  user?: T;
+  project?: T;
+  step?: T;
   updatedAt?: T;
   createdAt?: T;
 }

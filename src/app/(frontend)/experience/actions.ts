@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { currentUser } from "@/lib/auth";
 import { payloadClient } from "@/lib/payload";
+import { recordStep } from "@/lib/activity";
 import { PROFILE_LANGS } from "@/lib/profile";
 import { MODE_LABELS, formatHeld } from "@/lib/engagements";
 import { sendEmail, emailConfigured, teamMentionEmail } from "@/lib/email";
@@ -154,6 +155,7 @@ export async function createEngagement(formData: FormData): Promise<void> {
     overrideAccess: true,
   });
 
+  await recordStep(payload, "engagement_created", { user: user.id });
   await inviteTeam(payload, created.id, user.id);
 
   revalidatePath("/experience");

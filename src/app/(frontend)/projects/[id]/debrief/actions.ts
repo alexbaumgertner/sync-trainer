@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { currentUser } from "@/lib/auth";
 import { payloadClient } from "@/lib/payload";
+import { recordStep } from "@/lib/activity";
 import { parseMissingTerms } from "@/lib/debrief";
 
 const PACES = ["slower", "as-expected", "faster", "much-faster"] as const;
@@ -70,6 +71,10 @@ export async function saveDebrief(formData: FormData): Promise<void> {
   } else {
     await payload.create({ collection: "debriefs", data, overrideAccess: true });
   }
+
+  // Шаг пишем и на правке: заполненность — это про то, вернулся ли человек
+  // к проекту после мероприятия, а не про то, сколько строк в таблице.
+  await recordStep(payload, "debrief_filled", { user: user.id, project: projectId });
 
   // E1: отметки «прозвучало на событии». Форма присылает только отмеченные,
   // поэтому снятые надо гасить явно — иначе снять отметку было бы нельзя.

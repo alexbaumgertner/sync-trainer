@@ -2,6 +2,7 @@
 // и скрипты обслуживания, которые исполняются вне Next. В клиентский код он
 // не попадёт — тянет за собой Payload и доступ к базе.
 import { payloadClient } from "./payload";
+import { recordStep } from "./activity";
 import { acceptPendingInvitation } from "./otp";
 import { generateInviteToken, hashInviteToken, inviteLink } from "./invite-token";
 
@@ -36,6 +37,12 @@ export async function createInvitation(args: {
 
   // Письмо отправляет хук коллекции: так приглашение работает и из админки,
   // и из кода — одним путём, а не двумя.
+  // Шаг пишем только когда приглашает человек: приглашения из скрипта
+  // обслуживания к продуктовой воронке отношения не имеют.
+  if (args.invitedBy) {
+    await recordStep(payload, "invite_sent", { user: args.invitedBy });
+  }
+
   return { link: inviteLink(token) };
 }
 
@@ -104,9 +111,11 @@ export async function redeemInvitation(token: string): Promise<RedeemResult> {
       data: { acceptedAt: new Date().toISOString(), acceptedBy: users.docs[0].id },
       overrideAccess: true,
     });
+    await recordStep(payload, "invite_accepted", { user: users.docs[0].id });
     return { ok: true, userId: users.docs[0].id };
   }
 
   const userId = await acceptPendingInvitation(invite.email);
+  if (userId) await recordStep(payload, "invite_accepted", { user: userId });
   return userId ? { ok: true, userId } : { ok: false, error: INVALID_INVITE };
 }

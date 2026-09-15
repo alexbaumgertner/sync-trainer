@@ -17,6 +17,7 @@ import {
   inviteLink,
 } from "@/lib/invite-token";
 import { presetOptions, supportedLanguages } from "@/presets";
+import { STEP_LABELS, STEPS } from "@/lib/activity-steps";
 import { PROFILE_LANGS, VISIBLE_FIELDS } from "@/lib/profile";
 
 const LANGUAGE_LABELS: Record<string, string> = {
@@ -632,6 +633,45 @@ export const OtpCodes: CollectionConfig = {
 };
 
 /**
+ * Продуктовая воронка (слой 2 метрик).
+ *
+ * Отдельно от `usage-events`: там расход денег на Google, по записи на
+ * обращение. Здесь — шаги пользователя, в том числе бесплатные, и вопросы
+ * к ним другие: сколько проектов доходит от документа до озвучки, сколько
+ * разборов заполняется, сколько приглашений превращается в учётные записи.
+ *
+ * Свободного текста тут нет и не будет: `step` — перечисление. Причина
+ * в `src/lib/activity-steps.ts`, и она не про аккуратность, а про NDA
+ * заказчиков.
+ *
+ * Записи копятся без срока: истории и нужна история. Если таблица начнёт
+ * весить заметно, резать её надо по возрасту, а не отключать запись.
+ */
+export const Activity: CollectionConfig = {
+  slug: "activity",
+  admin: { useAsTitle: "step", defaultColumns: ["step", "user", "project", "createdAt"] },
+  access: {
+    // Воронку смотрит владелец продукта. Пользователю она не показывается
+    // нигде, и давать читать чужие шаги незачем.
+    read: adminOnly,
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
+  },
+  fields: [
+    { name: "user", type: "relationship", relationTo: "users", required: true, index: true },
+    { name: "project", type: "relationship", relationTo: "projects", index: true },
+    {
+      name: "step",
+      type: "select",
+      required: true,
+      index: true,
+      options: STEPS.map((value) => ({ label: STEP_LABELS[value], value })),
+    },
+  ],
+};
+
+/**
  * Запись о проведённой работе (W1–W5).
  *
  * Не разбор. Разбор (`debriefs`) приватен и честен именно поэтому: там пишут,
@@ -806,4 +846,5 @@ export const collections: CollectionConfig[] = [
   Debriefs,
   Engagements,
   UsageEvents,
+  Activity,
 ];

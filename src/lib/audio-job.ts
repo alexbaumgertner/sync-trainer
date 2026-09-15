@@ -3,6 +3,7 @@ import type { Payload } from "payload";
 import type { PlanItem } from "@/lib/ssml";
 import { synthesizePlan, explainError } from "@/lib/google-tts";
 import { artifactPath, putArtifact } from "@/lib/artifacts";
+import { recordStep } from "@/lib/activity";
 import { withId3, SYNTHETIC_NOTICE } from "@/lib/id3";
 import { recordUsage } from "@/lib/usage";
 import { tierOf, TIER_LABEL } from "@/lib/voices";
@@ -67,6 +68,11 @@ export async function runAudioJob(job: AudioJob): Promise<void> {
       collection: "artifacts",
       data: { project: projectId, generation: generationId, kind: "audio", blobPath, bytes },
       overrideAccess: true,
+    });
+
+    await recordStep(payload, "audio_generated", {
+      user: job.userId,
+      project: projectId,
     });
 
     await payload.update({

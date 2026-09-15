@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -23,7 +24,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="ru"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        {/*
+          Счётчик страниц (слой 1 метрик). Кук не ставит и человека не
+          опознаёт — считает по отпечатку запроса, поэтому баннер согласия
+          не нужен. Показывает, куда заходят; чего в нём принципиально нет,
+          так это пути конкретного человека — для этого коллекция `activity`.
+
+          В адресах у нас только идентификаторы. Если когда-нибудь в путь
+          или заголовок страницы попадёт название мероприятия, оно уедет
+          сюда и останется навсегда, а согласия на это переводчик не давал.
+        */}
+        <Analytics />
+      </body>
     </html>
   );
 }

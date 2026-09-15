@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { currentUser } from "@/lib/auth";
 import { payloadClient } from "@/lib/payload";
+import { recordStep } from "@/lib/activity";
 
 /** Создание проекта. Владельца проставляет хук коллекции из сессии. */
 export async function createProject(formData: FormData): Promise<void> {
@@ -34,6 +35,8 @@ export async function createProject(formData: FormData): Promise<void> {
     },
     overrideAccess: true,
   });
+
+  await recordStep(payload, "project_created", { user: user.id, project: project.id });
 
   revalidatePath("/projects");
   redirect(`/projects/${project.id}`);

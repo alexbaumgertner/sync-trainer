@@ -3,6 +3,7 @@ import { del, get } from "@vercel/blob";
 import { debriefNotesFor } from "@/lib/debrief-notes";
 import { currentUser } from "@/lib/auth";
 import { payloadClient } from "@/lib/payload";
+import { recordStep } from "@/lib/activity";
 import { extractDocument, kindOf, MAX_UPLOAD_BYTES } from "@/lib/extract";
 import { presetById } from "@/presets";
 import { generateScript, glossaryToCsv, scriptToMarkdown } from "@/lib/script-generation";
@@ -339,6 +340,9 @@ export async function POST(
       costUsd: outcome.costUsd,
       tier: outcome.model,
     });
+
+    await recordStep(payload, "document_uploaded", { user: user.id, project: project.id });
+    await recordStep(payload, "script_generated", { user: user.id, project: project.id });
 
     return NextResponse.json({
       id: document.id,

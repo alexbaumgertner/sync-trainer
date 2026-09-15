@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
+import { recordStep } from "@/lib/activity";
 import { payloadClient } from "@/lib/payload";
 import { SOURCE_LANG_LABELS } from "@/lib/projects";
 import {
@@ -89,6 +90,8 @@ export async function GET(
     source: SOURCE_LANG_LABELS[project.sourceLang] ?? project.sourceLang,
     target: TARGET_LANG_LABELS[project.targetLang] ?? project.targetLang,
   };
+
+  await recordStep(payload, "glossary_exported", { user: user.id, project: project.id });
 
   const name = `${slug(project.title)}-glossary.${format}`;
   const disposition = `attachment; filename*=UTF-8''${encodeURIComponent(name)}`;
