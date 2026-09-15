@@ -13,6 +13,7 @@ import {
   disputeParticipation,
   withdrawParticipation,
 } from "./confirm-actions";
+import { inviteMember } from "./invite-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -22,13 +23,13 @@ export default async function EngagementPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; error?: string; answered?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; answered?: string; invite?: string }>;
 }) {
   const user = await currentUser();
   if (!user) redirect("/");
 
   const { id } = await params;
-  const { saved, error, answered } = await searchParams;
+  const { saved, error, answered, invite } = await searchParams;
   const engagementId = Number(id);
   if (!Number.isInteger(engagementId)) notFound();
 
@@ -223,6 +224,52 @@ export default async function EngagementPage({
           visibility: row.visibility,
         }}
       />
+
+      {(() => {
+        // Приглашать имеет смысл только тех, кого назвали с адресом,
+        // но связи не появилось: значит учётной записи ещё нет.
+        const invitable = row.team.filter((m) => m.email && !m.userId);
+        if (!invitable.length) return null;
+
+        return (
+          <section className="mt-10 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+            <h2 className="text-sm font-medium">Позвать в сервис</h2>
+            <p className="mt-1 max-w-prose text-xs text-neutral-500">
+              У этих коллег нет учётной записи, поэтому подтвердить участие они
+              не могут — пока запись держится на вашем слове. Приглашение уходит
+              обычной персональной ссылкой.
+            </p>
+
+            {invite && (
+              <p role="status" className="mt-3 text-xs text-neutral-500">
+                {invite === "sent" && "Приглашение отправлено."}
+                {invite === "exists" && "У этого адреса уже есть учётная запись — связь появится при следующем сохранении записи."}
+                {invite === "failed" && "Письмо не ушло. Попробуйте позже."}
+                {invite === "unknown" && "Этого адреса нет в команде записи."}
+              </p>
+            )}
+
+            <ul className="mt-3 grid gap-2">
+              {invitable.map((member, i) => (
+                <li key={i} className="flex flex-wrap items-center gap-3 text-sm">
+                  <span>{member.name}</span>
+                  <span className="text-xs text-neutral-500">{member.email}</span>
+                  <form action={inviteMember} className="ml-auto">
+                    <input type="hidden" name="id" value={row.id} />
+                    <input type="hidden" name="email" value={member.email ?? ""} />
+                    <button
+                      type="submit"
+                      className="rounded border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+                    >
+                      Пригласить
+                    </button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })()}
 
       <div className="mt-10 flex items-center justify-between border-t border-neutral-200 pt-5 dark:border-neutral-800">
         {row.projectId ? (
