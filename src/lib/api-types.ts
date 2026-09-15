@@ -1,25 +1,11 @@
-export interface TtsRequest {
-  /** исходный SSML (или простой текст) */
-  script: string;
-  /** "single" — один голос на весь файл, "perSpeaker" — свой голос каждому */
-  mode: "single" | "perSpeaker";
-  voice: string;
-  speakerVoices?: Record<string, string>;
-  /** значение для <prosody rate="...">, например "105%" */
-  rate?: string | null;
-  /** убирать "Moderator:" из произносимого текста */
-  stripLabels?: boolean;
-  /** байтовый лимит куска, по умолчанию 4600 */
-  maxBytes?: number;
-  /** дополнительный множитель темпа поверх prosody */
-  speakingRate?: number;
-  pitch?: number;
-}
-
-export interface TtsErrorResponse {
-  error: string;
-  detail?: string;
-}
+/**
+ * Типы, общие для сервера и клиента.
+ *
+ * Раньше здесь жили и типы запроса к студии — она удалена 15 сентября
+ * вместе со своим маршрутом синтеза: проекты делают то же самое, но
+ * с документом, скриптом и глоссарием, а неиспользуемый маршрут,
+ * умеющий тратить деньги на Google, лучше не держать вовсе.
+ */
 
 export interface UsageEntry {
   at: string;
@@ -30,12 +16,6 @@ export interface UsageEntry {
   format: string;
   chunks: number;
   seconds: number;
-}
-
-export interface UsageTotals {
-  usd: number;
-  chars: number;
-  generations: number;
 }
 
 export interface UsageSummary {

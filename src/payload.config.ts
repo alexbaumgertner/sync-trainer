@@ -10,7 +10,8 @@ import { databaseUrl } from "@/lib/database-url";
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default buildConfig({
-  // REST Payload уезжает с /api, иначе он перекрыл бы наши /api/tts и /api/usage.
+  // REST Payload уезжает с /api, иначе он перекрыл бы наши собственные
+  // маршруты: /api/usage, /api/voices, /api/projects/*.
   routes: { admin: "/admin", api: "/payload-api" },
 
   admin: {

@@ -18,9 +18,9 @@ test.describe("доступ без входа", () => {
     });
   }
 
-  test("/api/tts отвечает 401", async ({ request }) => {
-    const response = await request.post("/api/tts", {
-      data: { script: "test", mode: "single", voice: "en-US-Neural2-F" },
+  test("синтез аудио отвечает 401", async ({ request }) => {
+    const response = await request.post("/api/projects/1/audio", {
+      data: { voice: "en-US-Neural2-F" },
     });
     expect(response.status()).toBe(401);
   });

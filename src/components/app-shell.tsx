@@ -24,9 +24,6 @@ export default function AppShell({
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">{title}</h1>
         </div>
         <div className="flex items-center gap-3 text-xs text-neutral-500">
-          <Link href="/studio" className="underline-offset-2 hover:underline">
-            Студия
-          </Link>
           <Link href="/experience" className="underline-offset-2 hover:underline">
             Опыт
           </Link>
