@@ -186,3 +186,30 @@ describe("подмена владельца при создании", () => {
     await payload.delete({ collection: "projects", id: created.id, overrideAccess: true });
   });
 });
+
+/**
+ * Кто попадает в админку (Б4 аудита).
+ *
+ * До починки Payload пускал в оболочку любого вошедшего: данных он бы не
+ * показал, но схему целиком — да, а вместе с ней удобный интерфейс для
+ * записи. Проверяем саму функцию из конфигурации: через Local API этот
+ * путь не проходит, его дёргает только оболочка админки.
+ */
+describe("доступ в админку", () => {
+  it("объявлен у коллекции пользователей", async () => {
+    const { Users } = await import("@/collections");
+    // Функции нет — значит Payload пускает всех, и это не мелочь оформления.
+    expect(typeof Users.access?.admin).toBe("function");
+  });
+
+  it("пускает администратора и отказывает остальным", async () => {
+    const { Users } = await import("@/collections");
+    const ask = (user: unknown) =>
+      Users.access!.admin!({ req: { user } } as never);
+
+    expect(await ask({ id: 1, role: "admin" })).toBe(true);
+    expect(await ask({ id: 2, role: "interpreter" })).toBe(false);
+    expect(await ask({ id: 3 })).toBe(false);
+    expect(await ask(null)).toBe(false);
+  });
+});

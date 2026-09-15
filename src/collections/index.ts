@@ -3,6 +3,7 @@ import {
   adminOnly,
   artifactStaysInProject,
   authenticated,
+  isAdmin,
   ownedBy,
   ownedByProject,
   ownUsage,
@@ -53,6 +54,19 @@ export const Users: CollectionConfig = {
   auth: { disableLocalStrategy: true, strategies: [otpCookieStrategy] },
   admin: { useAsTitle: "email", defaultColumns: ["email", "role", "createdAt"] },
   access: {
+    /**
+     * Кто вообще попадает в админку (Б4 аудита).
+     *
+     * Без этой функции Payload пускает в оболочку любого вошедшего. Данных
+     * он постороннему не покажет — правила ниже работают, — но схему целиком
+     * тот увидит, а вместе с ней удобный интерфейс для записи. До починки
+     * Б1 это была ещё и готовая форма для записи в чужой проект.
+     *
+     * Проверка именно здесь, а не в `src/proxy.ts`: в куке лежит только
+     * идентификатор, роли там нет, а ходить из прокси в базу на каждый
+     * запрос — плата за то, что Payload проверит и сам.
+     */
+    admin: ({ req: { user } }) => isAdmin(user as never),
     read: ({ req: { user } }) =>
       user?.role === "admin" ? true : { id: { equals: user?.id } },
     create: adminOnly,
