@@ -207,6 +207,10 @@ export interface Project {
   eventName?: string | null;
   eventStartsOn?: string | null;
   eventLocation?: string | null;
+  /**
+   * E5: когда напомнили о разборе. Напоминаем один раз
+   */
+  debriefRemindedAt?: string | null;
   sourceLang: 'en' | 'de' | 'fr' | 'tr';
   targetLang: 'ru' | 'en';
   stylePreset: 'un' | 'court' | 'eu' | 'corporate';
@@ -505,6 +509,7 @@ export interface ProjectsSelect<T extends boolean = true> {
   eventName?: T;
   eventStartsOn?: T;
   eventLocation?: T;
+  debriefRemindedAt?: T;
   sourceLang?: T;
   targetLang?: T;
   stylePreset?: T;

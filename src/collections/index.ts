@@ -251,6 +251,14 @@ export const Projects: CollectionConfig = {
     { name: "eventStartsOn", type: "date" },
     { name: "eventLocation", type: "text" },
     {
+      name: "debriefRemindedAt",
+      type: "date",
+      admin: {
+        readOnly: true,
+        description: "E5: когда напомнили о разборе. Напоминаем один раз",
+      },
+    },
+    {
       name: "sourceLang",
       type: "select",
       required: true,
