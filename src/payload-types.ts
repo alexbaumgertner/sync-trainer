@@ -142,7 +142,53 @@ export interface User {
   email: string;
   role: 'interpreter' | 'admin';
   uiLocale?: ('ru' | 'en') | null;
+  /**
+   * P1: как вас зовут коллеги
+   */
   displayName?: string | null;
+  /**
+   * P1: где вы обычно работаете
+   */
+  city?: string | null;
+  /**
+   * P1: свободный текст о себе
+   */
+  bio?: string | null;
+  /**
+   * P1: направленные пары. EN→RU и RU→EN — разные строки: перевод в кабину и retour это разная работа и разная ставка
+   */
+  languagePairs?:
+    | {
+        source: 'ru' | 'en' | 'de' | 'fr' | 'es' | 'it' | 'pt' | 'tr' | 'zh' | 'ar' | 'uk' | 'pl';
+        target: 'ru' | 'en' | 'de' | 'fr' | 'es' | 'it' | 'pt' | 'tr' | 'zh' | 'ar' | 'uk' | 'pl';
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * P1: права человека, климат, медицина, право
+   */
+  specializations?:
+    | {
+        name: string;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * P1: AIIC, национальные объединения
+   */
+  memberships?:
+    | {
+        name: string;
+        id?: string | null;
+      }[]
+    | null;
+  visibility?: {
+    city?: boolean | null;
+    bio?: boolean | null;
+    languagePairs?: boolean | null;
+    specializations?: boolean | null;
+    memberships?: boolean | null;
+  };
   invitedAt?: string | null;
   /**
    * Пусто — берётся общий лимит из окружения (B2)
@@ -464,6 +510,36 @@ export interface UsersSelect<T extends boolean = true> {
   role?: T;
   uiLocale?: T;
   displayName?: T;
+  city?: T;
+  bio?: T;
+  languagePairs?:
+    | T
+    | {
+        source?: T;
+        target?: T;
+        id?: T;
+      };
+  specializations?:
+    | T
+    | {
+        name?: T;
+        id?: T;
+      };
+  memberships?:
+    | T
+    | {
+        name?: T;
+        id?: T;
+      };
+  visibility?:
+    | T
+    | {
+        city?: T;
+        bio?: T;
+        languagePairs?: T;
+        specializations?: T;
+        memberships?: T;
+      };
   invitedAt?: T;
   monthlyLimitUsd?: T;
   updatedAt?: T;

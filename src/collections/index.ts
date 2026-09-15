@@ -8,6 +8,7 @@ import {
   inviteLink,
 } from "@/lib/invite-token";
 import { presetOptions, supportedLanguages } from "@/presets";
+import { PROFILE_LANGS, VISIBLE_FIELDS } from "@/lib/profile";
 
 const LANGUAGE_LABELS: Record<string, string> = {
   en: "English",
@@ -88,7 +89,66 @@ export const Users: CollectionConfig = {
         { label: "English", value: "en" },
       ],
     },
-    { name: "displayName", type: "text" },
+    { name: "displayName", type: "text", admin: { description: "P1: как вас зовут коллеги" } },
+
+    /**
+     * Профиль переводчика (P1).
+     *
+     * Живёт полями на пользователе, а не отдельной таблицей: связь один-к-одному
+     * не даёт ничего, кроме лишнего запроса на каждой странице.
+     */
+    { name: "city", type: "text", admin: { description: "P1: где вы обычно работаете" } },
+    {
+      name: "bio",
+      type: "textarea",
+      admin: { description: "P1: свободный текст о себе" },
+    },
+    {
+      name: "languagePairs",
+      type: "array",
+      admin: {
+        description:
+          "P1: направленные пары. EN→RU и RU→EN — разные строки: перевод в кабину " +
+          "и retour это разная работа и разная ставка",
+      },
+      fields: [
+        { name: "source", type: "select", required: true, options: PROFILE_LANGS },
+        { name: "target", type: "select", required: true, options: PROFILE_LANGS },
+      ],
+    },
+    {
+      name: "specializations",
+      type: "array",
+      admin: { description: "P1: права человека, климат, медицина, право" },
+      fields: [{ name: "name", type: "text", required: true }],
+    },
+    {
+      name: "memberships",
+      type: "array",
+      admin: { description: "P1: AIIC, национальные объединения" },
+      fields: [{ name: "name", type: "text", required: true }],
+    },
+
+    /**
+     * Что из профиля видно коллегам (P3).
+     *
+     * Имя в список не входит намеренно: карточка без имени — не карточка,
+     * а скрыть себя целиком можно, просто не заполняя профиль.
+     *
+     * Показываем только то, что владелец разрешил явно: значение по умолчанию
+     * `false`. Обратный порядок — «скрыто, пока не запретил» — однажды
+     * покажет коллегам поле, о котором человек не знал, что оно появилось.
+     */
+    {
+      name: "visibility",
+      type: "group",
+      fields: VISIBLE_FIELDS.map((name) => ({
+        name,
+        type: "checkbox" as const,
+        defaultValue: false,
+      })),
+    },
+
     { name: "invitedAt", type: "date", admin: { readOnly: true } },
     {
       name: "monthlyLimitUsd",

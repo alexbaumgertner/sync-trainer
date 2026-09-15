@@ -4,6 +4,7 @@ import * as migration_20260913_061846_invitations_optional_token from './2026091
 import * as migration_20260915_debrief_hardest from './20260915_debrief_hardest';
 import * as migration_20260915_drop_passwords from './20260915_drop_passwords';
 import * as migration_20260915_debrief_reminder from './20260915_debrief_reminder';
+import * as migration_20260915_profile from './20260915_profile';
 
 export const migrations = [
   {
@@ -35,5 +36,10 @@ export const migrations = [
     up: migration_20260915_debrief_reminder.up,
     down: migration_20260915_debrief_reminder.down,
     name: '20260915_debrief_reminder',
+  },
+  {
+    up: migration_20260915_profile.up,
+    down: migration_20260915_profile.down,
+    name: '20260915_profile',
   },
 ];
