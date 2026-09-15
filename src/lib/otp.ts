@@ -126,9 +126,6 @@ export async function acceptPendingInvitation(
     collection: "users",
     data: {
       email,
-      // Локальная стратегия Payload требует пароль. Вход по нему не предусмотрен,
-      // поэтому ставим случайный, которого не знает никто.
-      password: crypto.randomBytes(32).toString("base64url"),
       role: "interpreter",
       invitedAt: new Date().toISOString(),
     },

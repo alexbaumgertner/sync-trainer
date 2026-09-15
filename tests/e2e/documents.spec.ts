@@ -74,7 +74,7 @@ test.beforeAll(async () => {
   const payload = await getPayload({ config });
   const user = await payload.create({
     collection: "users",
-    data: { email, password: `pw-${stamp}`, role: "interpreter" },
+    data: { email, role: "interpreter" },
     overrideAccess: true,
   });
   userId = user.id;

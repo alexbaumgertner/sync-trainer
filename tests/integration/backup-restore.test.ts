@@ -54,7 +54,7 @@ beforeAll(async () => {
   // кириллица, json-поле и внешние ключи.
   const user = await payload.create({
     collection: "users",
-    data: { email: `backup-${stamp}@example.test`, password: `pw-${stamp}`, role: "interpreter" },
+    data: { email: `backup-${stamp}@example.test`, role: "interpreter" },
     overrideAccess: true,
   });
   userId = user.id;

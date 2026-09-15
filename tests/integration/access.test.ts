@@ -12,8 +12,8 @@ import config from "@payload-config";
 
 let payload: Payload;
 const stamp = Date.now();
-const alice = { email: `alice-${stamp}@example.test`, password: "test-password-1" };
-const bob = { email: `bob-${stamp}@example.test`, password: "test-password-2" };
+const alice = { email: `alice-${stamp}@example.test`};
+const bob = { email: `bob-${stamp}@example.test`};
 
 let aliceUser: { id: number };
 let bobUser: { id: number };

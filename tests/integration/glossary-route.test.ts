@@ -37,7 +37,7 @@ beforeAll(async () => {
     (
       await payload.create({
         collection: "users",
-        data: { email: `gl-${tag}-${stamp}@example.test`, password: `pw-${stamp}`, role: "interpreter" },
+        data: { email: `gl-${tag}-${stamp}@example.test`, role: "interpreter" },
         overrideAccess: true,
       })
     ).id;

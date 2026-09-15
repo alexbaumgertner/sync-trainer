@@ -18,7 +18,6 @@ const makeUser = async (prefix: string, monthlyLimitUsd?: number) => {
     collection: "users",
     data: {
       email: `${prefix}-${stamp}@example.test`,
-      password: "irrelevant-password",
       role: "interpreter",
       monthlyLimitUsd,
     },

@@ -22,7 +22,9 @@
     "invite": "node --import tsx scripts/invite.mjs",
     "migrate:usage": "node --import tsx scripts/migrate-usage.mjs",
     "restore": "node --import tsx scripts/restore.mjs",
-    "backup:verify": "node --import tsx scripts/backup-verify.mjs"
+    "backup:verify": "node --import tsx scripts/backup-verify.mjs",
+    "session": "node --import tsx scripts/session.mjs",
+    "admin": "node --import tsx scripts/admin.mjs"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",

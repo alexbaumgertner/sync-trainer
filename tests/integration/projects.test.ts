@@ -16,7 +16,7 @@ let stranger: number;
 const makeUser = async (prefix: string) => {
   const user = await payload.create({
     collection: "users",
-    data: { email: `${prefix}-${stamp}@example.test`, password: "pass", role: "interpreter" },
+    data: { email: `${prefix}-${stamp}@example.test`, role: "interpreter" },
     overrideAccess: true,
   });
   return user.id;

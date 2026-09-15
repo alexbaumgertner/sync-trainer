@@ -50,7 +50,7 @@ beforeAll(async () => {
   const payload = await payloadClient();
   const user = await payload.create({
     collection: "users",
-    data: { email: `upload-${stamp}@example.test`, password: `pw-${stamp}`, role: "interpreter" },
+    data: { email: `upload-${stamp}@example.test`, role: "interpreter" },
     overrideAccess: true,
   });
   userId = user.id;

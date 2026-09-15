@@ -108,7 +108,7 @@ beforeAll(async () => {
   payload = await payloadClient();
   const user = await payload.create({
     collection: "users",
-    data: { email: `pipeline-${stamp}@example.test`, password: `pw-${stamp}`, role: "interpreter" },
+    data: { email: `pipeline-${stamp}@example.test`, role: "interpreter" },
     overrideAccess: true,
   });
   userId = user.id;
