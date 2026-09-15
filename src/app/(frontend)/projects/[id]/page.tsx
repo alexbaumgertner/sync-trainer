@@ -1,3 +1,6 @@
+import ArtifactRating from "@/components/artifact-rating";
+import { saveRating } from "./rate-actions";
+import { RATING_TARGETS, ratingFor, type RatingTarget } from "@/lib/ratings";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
@@ -30,7 +33,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const detail = await getProject(Number(id), user.id);
   if (!detail) notFound();
 
-  const { project, files, documents, costUsd, glossaryCount, hasDebrief } = detail;
+  const { project, files, documents, ratings, costUsd, glossaryCount, hasDebrief } = detail;
 
   return (
     <AppShell email={user.email} title={project.title}>
@@ -103,6 +106,17 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                 >
                   Скачать
                 </a>
+                {RATING_TARGETS.includes(file.kind as RatingTarget) && (
+                  <div className="mt-1 w-full">
+                    <ArtifactRating
+                      action={saveRating}
+                      projectId={project.id}
+                      target={file.kind as RatingTarget}
+                      generationId={file.generationId}
+                      current={ratingFor(ratings, file.kind as RatingTarget, file.generationId)}
+                    />
+                  </div>
+                )}
               </li>
             ))}
           </ul>

@@ -14,6 +14,7 @@
 import { getPayload } from "payload";
 import config from "../src/payload.config.js";
 import { STEP_LABELS } from "../src/lib/activity-steps.js";
+import { SCORE_LABELS, TARGET_LABELS } from "../src/lib/ratings.js";
 
 const payload = await getPayload({ config });
 const count = async (collection, where) =>
@@ -76,6 +77,34 @@ const usage = (
 const spent = usage.reduce((sum, u) => sum + (u.costUsd ?? 0), 0);
 line("обращений к синтезу", usage.length);
 console.log(`  ${"потрачено всего".padEnd(34)} ${("$" + spent.toFixed(2)).padStart(5)}`);
+
+console.log("\n== Годится ли сгенерированное ==");
+const rated = (
+  await payload.find({ collection: "ratings", limit: 5000, depth: 0, overrideAccess: true })
+).docs;
+if (!rated.length) {
+  console.log("  оценок пока нет");
+} else {
+  for (const target of Object.keys(TARGET_LABELS)) {
+    const rows = rated.filter((r) => r.target === target);
+    if (!rows.length) continue;
+    const avg = rows.reduce((s, r) => s + Number(r.score), 0) / rows.length;
+    const good = rows.filter((r) => Number(r.score) === 3).length;
+    console.log(
+      `  ${TARGET_LABELS[target].padEnd(12)} оценок ${String(rows.length).padStart(3)} · ` +
+        `средняя ${avg.toFixed(1)} · «годится как есть» ${good}${pct(good, rows.length)}`,
+    );
+  }
+  // Заметки — источник будущего списка причин «чем плохо»: придумывать
+  // его заранее не из чего, а отсюда он и вырастет.
+  const notes = rated.filter((r) => r.note?.trim());
+  if (notes.length) {
+    console.log("\n  что пишут:");
+    for (const row of notes.slice(-8)) {
+      console.log(`    ${SCORE_LABELS[Number(row.score)]} · ${row.note.trim().slice(0, 90)}`);
+    }
+  }
+}
 
 console.log("\n== Шаги (activity) ==");
 const steps = (

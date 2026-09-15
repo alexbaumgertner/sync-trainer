@@ -18,6 +18,7 @@ import {
 } from "@/lib/invite-token";
 import { presetOptions, supportedLanguages } from "@/presets";
 import { STEP_LABELS, STEPS } from "@/lib/activity-steps";
+import { RATING_TARGETS, TARGET_LABELS } from "@/lib/ratings";
 import { PROFILE_LANGS, VISIBLE_FIELDS } from "@/lib/profile";
 
 const LANGUAGE_LABELS: Record<string, string> = {
@@ -280,7 +281,16 @@ export const Projects: CollectionConfig = {
           .map((doc) => doc.blobPath)
           .filter(Boolean);
 
+        // Список обязан покрывать КАЖДУЮ коллекцию с обязательной связью
+        // на проект. Забыть одну — значит сделать проект неудаляемым, и
+        // узнается это на первом же человеке, который решил прибраться.
+        // Полноту списка стережёт тест `project-cascade`.
+        //
+        // `activity` здесь намеренно нет: связь с проектом там необязательная,
+        // `SET NULL` ложится, и шаги воронки переживают удаление проекта —
+        // «сколько проектов дошло до озвучки» не должно меняться задним числом.
         for (const collection of [
+          "ratings",
           "artifacts",
           "documents",
           "generations",
@@ -691,6 +701,69 @@ export const Activity: CollectionConfig = {
 };
 
 /**
+ * Оценка сгенерированного материала (обратная связь о качестве).
+ *
+ * Привязана к ГЕНЕРАЦИИ, а не к проекту: перегенерировали — это другой
+ * материал, и прежняя оценка остаётся при том, что её заслужила. Иначе
+ * «годится» переезжало бы на файл, которого оценивавший не слышал.
+ *
+ * Свободная заметка здесь, в отличие от `activity`, разрешена: это данные
+ * проекта, видит их только владелец, и пишет он о собственной озвучке.
+ * Правило «без текста» касалось метрик, которые смотрит владелец сервиса.
+ * Заметки к тому же нужны по делу: список причин «чем плохо» придумывать
+ * заранее не из чего, а из них он и вырастет.
+ */
+export const Ratings: CollectionConfig = {
+  slug: "ratings",
+  admin: {
+    useAsTitle: "target",
+    defaultColumns: ["target", "score", "project", "createdAt"],
+  },
+  access: {
+    read: ownedByProject,
+    update: ownedByProject,
+    delete: ownedByProject,
+    // Как и у прочих дочерних: `Where` на создании Payload не применяет,
+    // владельца проверяет `withinOwnProject`.
+    create: authenticated,
+  },
+  hooks: { beforeChange: [withinOwnProject] },
+  fields: [
+    { name: "project", type: "relationship", relationTo: "projects", required: true, index: true },
+    {
+      name: "generation",
+      type: "relationship",
+      relationTo: "generations",
+      index: true,
+      admin: { description: "Какой именно вывод оценили" },
+    },
+    // Необязателен по той же причине, что в `activity`: `SET NULL`
+    // не ложится на `NOT NULL`, и ушедшего пользователя было бы не удалить.
+    { name: "user", type: "relationship", relationTo: "users", index: true },
+    {
+      name: "target",
+      type: "select",
+      required: true,
+      index: true,
+      options: RATING_TARGETS.map((value) => ({ label: TARGET_LABELS[value], value })),
+    },
+    {
+      name: "score",
+      type: "number",
+      required: true,
+      min: 1,
+      max: 3,
+      admin: { description: "1 не годится · 2 сойдёт с оговорками · 3 годится как есть" },
+    },
+    {
+      name: "note",
+      type: "textarea",
+      admin: { description: "Чем именно плохо или хорошо. Необязательно" },
+    },
+  ],
+};
+
+/**
  * Запись о проведённой работе (W1–W5).
  *
  * Не разбор. Разбор (`debriefs`) приватен и честен именно поэтому: там пишут,
@@ -866,4 +939,5 @@ export const collections: CollectionConfig[] = [
   Engagements,
   UsageEvents,
   Activity,
+  Ratings,
 ];

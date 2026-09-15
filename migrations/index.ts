@@ -20,6 +20,7 @@ import * as migration_20260915_team_reminded from './20260915_team_reminded';
 import * as migration_20260915_zz_locked_engagements from './20260915_zz_locked_engagements';
 import * as migration_20260916_activity from './20260916_activity';
 import * as migration_20260916_nullable_actors from './20260916_nullable_actors';
+import * as migration_20260916_zz_ratings from './20260916_zz_ratings';
 
 export const migrations = [
   {
@@ -86,5 +87,10 @@ export const migrations = [
     up: migration_20260916_nullable_actors.up,
     down: migration_20260916_nullable_actors.down,
     name: '20260916_nullable_actors',
+  },
+  {
+    up: migration_20260916_zz_ratings.up,
+    down: migration_20260916_zz_ratings.down,
+    name: '20260916_zz_ratings',
   },
 ];

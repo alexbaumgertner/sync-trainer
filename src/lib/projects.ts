@@ -1,6 +1,7 @@
 // Без пометки server-only намеренно: модуль зовут и серверные компоненты,
 // и серверные действия, и скрипты обслуживания.
 import { payloadClient } from "./payload";
+import { toRatingRow, type RatingRow } from "./ratings";
 import type { Project } from "@/payload-types";
 import { PRESETS } from "@/presets";
 import { STALE_AFTER_MS } from "./generations";
@@ -124,6 +125,8 @@ export interface ProjectFile {
   bytes: number | null;
   createdAt: string;
   blobPath: string;
+  /** Чей это вывод. По нему к файлу привязывается оценка */
+  generationId: number | null;
 }
 
 const ARTIFACT_LABELS: Record<string, string> = {
@@ -143,6 +146,8 @@ export interface ProjectDetail {
     pages: number | null;
     purgedAt: string | null;
   }[];
+  /** Оценки материала: годится ли сгенерированное для работы */
+  ratings: RatingRow[];
   costUsd: number;
   glossaryCount: number;
   /** E1–E3: заполнен ли разбор — от этого зависит подпись на карточке */
@@ -162,7 +167,7 @@ export async function getProject(id: number, userId: number): Promise<ProjectDet
   const ownerId = typeof project?.owner === "object" ? project.owner?.id : project?.owner;
   if (!project || ownerId !== userId) return null;
 
-  const [artifacts, documents, usage, glossary, debriefs] = await Promise.all([
+  const [artifacts, documents, usage, glossary, debriefs, ratings] = await Promise.all([
     payload.find({
       collection: "artifacts",
       where: { project: { equals: id } },
@@ -196,18 +201,30 @@ export async function getProject(id: number, userId: number): Promise<ProjectDet
       where: { project: { equals: id } },
       overrideAccess: true,
     }),
+    payload.find({
+      collection: "ratings",
+      where: { project: { equals: id } },
+      limit: 100,
+      depth: 0,
+      overrideAccess: true,
+    }),
   ]);
 
   return {
     project,
-    files: artifacts.docs.map((doc) => ({
-      id: doc.id,
-      kind: doc.kind,
-      label: ARTIFACT_LABELS[doc.kind] ?? doc.kind,
-      bytes: doc.bytes ?? null,
-      createdAt: doc.createdAt,
-      blobPath: doc.blobPath,
-    })),
+    files: artifacts.docs.map((doc) => {
+      const generationId =
+        typeof doc.generation === "object" ? (doc.generation?.id ?? null) : (doc.generation ?? null);
+      return {
+        id: doc.id,
+        kind: doc.kind,
+        label: ARTIFACT_LABELS[doc.kind] ?? doc.kind,
+        bytes: doc.bytes ?? null,
+        createdAt: doc.createdAt,
+        blobPath: doc.blobPath,
+        generationId: typeof generationId === "number" ? generationId : null,
+      };
+    }),
     documents: documents.docs.map((doc) => ({
       id: doc.id,
       filename: doc.filename,
@@ -215,6 +232,7 @@ export async function getProject(id: number, userId: number): Promise<ProjectDet
       pages: doc.pages ?? null,
       purgedAt: doc.purgedAt ?? null,
     })),
+    ratings: ratings.docs.map(toRatingRow),
     costUsd: usage.docs.reduce((sum, row) => sum + (row.costUsd ?? 0), 0),
     glossaryCount: glossary.totalDocs,
     hasDebrief: debriefs.totalDocs > 0,

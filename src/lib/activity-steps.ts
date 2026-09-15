@@ -21,6 +21,7 @@ export const STEPS = [
   "engagement_created",
   "invite_sent",
   "invite_accepted",
+  "rating_given",
 ] as const;
 
 export type Step = (typeof STEPS)[number];
@@ -35,4 +36,5 @@ export const STEP_LABELS: Record<Step, string> = {
   engagement_created: "запись о работе заведена",
   invite_sent: "приглашение отправлено",
   invite_accepted: "приглашение принято",
+  rating_given: "материал оценён",
 };

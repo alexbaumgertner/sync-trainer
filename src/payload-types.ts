@@ -79,6 +79,7 @@ export interface Config {
     engagements: Engagement;
     'usage-events': UsageEvent;
     activity: Activity;
+    ratings: Rating;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -98,6 +99,7 @@ export interface Config {
     engagements: EngagementsSelect<false> | EngagementsSelect<true>;
     'usage-events': UsageEventsSelect<false> | UsageEventsSelect<true>;
     activity: ActivitySelect<false> | ActivitySelect<true>;
+    ratings: RatingsSelect<false> | RatingsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -483,7 +485,32 @@ export interface Activity {
     | 'debrief_filled'
     | 'engagement_created'
     | 'invite_sent'
-    | 'invite_accepted';
+    | 'invite_accepted'
+    | 'rating_given';
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "ratings".
+ */
+export interface Rating {
+  id: number;
+  project: number | Project;
+  /**
+   * Какой именно вывод оценили
+   */
+  generation?: (number | null) | Generation;
+  user?: (number | null) | User;
+  target: 'audio' | 'glossary' | 'script';
+  /**
+   * 1 не годится · 2 сойдёт с оговорками · 3 годится как есть
+   */
+  score: number;
+  /**
+   * Чем именно плохо или хорошо. Необязательно
+   */
+  note?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -558,6 +585,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'activity';
         value: number | Activity;
+      } | null)
+    | ({
+        relationTo: 'ratings';
+        value: number | Rating;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -831,6 +862,20 @@ export interface ActivitySelect<T extends boolean = true> {
   user?: T;
   project?: T;
   step?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "ratings_select".
+ */
+export interface RatingsSelect<T extends boolean = true> {
+  project?: T;
+  generation?: T;
+  user?: T;
+  target?: T;
+  score?: T;
+  note?: T;
   updatedAt?: T;
   createdAt?: T;
 }
