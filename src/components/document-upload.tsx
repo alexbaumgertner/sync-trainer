@@ -176,23 +176,39 @@ export default function DocumentUpload({ projectId, clientUpload }: {
         придётся загрузить снова.
       </p>
 
-      {done && (
-        <p className="rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900">
-          Готово. {done}
-        </p>
-      )}
-      {warnings.length > 0 && (
-        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
-          <p className="mb-1 font-medium">Скрипт готов, но не всё вышло как просили:</p>
-          <ul className="list-disc pl-4">
-            {warnings.map((warning) => (
-              <li key={warning}>{warning}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/*
+        Живая область — ОБЁРТКА над видимыми блоками, а не вторая копия
+        текста рядом. Копия читалась бы дважды и, как выяснилось, ломает
+        поиск по тексту: на странице оказывалось два «Готово».
+        Обёртка при этом всегда в разметке — область, добавленную вместе
+        с содержимым, скринридеры объявляют ненадёжно.
+
+        Разбор документа идёт минуту с лишним, и всё это время меняется
+        только надпись на отключённой кнопке, а её смену не объявляют.
+      */}
+      <div aria-live="polite" className="flex flex-col gap-3 empty:hidden">
+        {busy && <p className="sr-only">Документ обрабатывается.</p>}
+        {done && (
+          <p className="rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900">
+            Готово. {done}
+          </p>
+        )}
+        {warnings.length > 0 && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+            <p className="mb-1 font-medium">Скрипт готов, но не всё вышло как просили:</p>
+            <ul className="list-disc pl-4">
+              {warnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
       {error && (
-        <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
+        <p
+          role="alert"
+          className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200"
+        >
           {error}
         </p>
       )}

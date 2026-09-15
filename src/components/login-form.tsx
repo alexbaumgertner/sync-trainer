@@ -55,7 +55,7 @@ export default function LoginForm({ configured }: { configured: boolean }) {
   }
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-6">
+    <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-6">
       <h1 className="text-xl font-semibold tracking-tight">Тренажёр синхрониста</h1>
       <p className="mt-1 mb-6 text-sm text-neutral-500 dark:text-neutral-400">
         {step === "email"
@@ -121,7 +121,7 @@ export default function LoginForm({ configured }: { configured: boolean }) {
           </button>
         </form>
       )}
-    </div>
+    </main>
   );
 }
 

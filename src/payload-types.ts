@@ -448,7 +448,7 @@ export interface Engagement {
  */
 export interface UsageEvent {
   id: number;
-  user: number | User;
+  user?: (number | null) | User;
   project?: (number | null) | Project;
   kind: 'script' | 'audio';
   chars: number;
@@ -472,7 +472,7 @@ export interface UsageEvent {
  */
 export interface Activity {
   id: number;
-  user: number | User;
+  user?: (number | null) | User;
   project?: (number | null) | Project;
   step:
     | 'project_created'

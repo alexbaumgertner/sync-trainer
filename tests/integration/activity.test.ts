@@ -93,3 +93,72 @@ describe("шаги и миграции не разъезжаются", () => {
     }
   });
 });
+
+/**
+ * Удаление пользователя (найдено сквозным тестом 15.09).
+ *
+ * Связь с пользователем объявлена `ON DELETE SET NULL`, а колонка была
+ * `NOT NULL` — сочетание, при котором человека, попросившего себя удалить,
+ * удалить нельзя. Модульные тесты этого не видели: каждый чистил за собой
+ * в правильном порядке и до сочетания не доходил.
+ */
+describe("уход пользователя", () => {
+  it("не блокируется его следом в метриках", async () => {
+    const victim = (
+      await payload.create({
+        collection: "users",
+        data: { email: `gone-${stamp}@example.test`, role: "interpreter" },
+        overrideAccess: true,
+      })
+    ).id as number;
+
+    await recordStep(payload, "project_created", { user: victim });
+    await payload.create({
+      collection: "usage-events",
+      data: { user: victim, kind: "script", chars: 1, costUsd: 0 },
+      overrideAccess: true,
+    });
+
+    await expect(
+      payload.delete({ collection: "users", id: victim, overrideAccess: true }),
+    ).resolves.toBeTruthy();
+  });
+
+  it("след остаётся, но без имени", async () => {
+    const victim = (
+      await payload.create({
+        collection: "users",
+        data: { email: `gone2-${stamp}@example.test`, role: "interpreter" },
+        overrideAccess: true,
+      })
+    ).id as number;
+
+    await recordStep(payload, "audio_generated", { user: victim });
+    const before = await payload.count({
+      collection: "activity",
+      where: { step: { equals: "audio_generated" } },
+      overrideAccess: true,
+    });
+
+    await payload.delete({ collection: "users", id: victim, overrideAccess: true });
+
+    // Воронка отвечает на вопрос «сколько проектов дошло до озвучки»,
+    // и ответ не должен меняться задним числом оттого, что кто-то ушёл.
+    const after = await payload.count({
+      collection: "activity",
+      where: { step: { equals: "audio_generated" } },
+      overrideAccess: true,
+    });
+    expect(after.totalDocs).toBe(before.totalDocs);
+
+    const orphan = await payload.find({
+      collection: "activity",
+      where: { step: { equals: "audio_generated" } },
+      sort: "-createdAt",
+      limit: 1,
+      depth: 0,
+      overrideAccess: true,
+    });
+    expect(orphan.docs[0].user).toBeFalsy();
+  });
+});

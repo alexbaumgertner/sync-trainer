@@ -584,7 +584,12 @@ export const UsageEvents: CollectionConfig = {
     delete: adminOnly,
   },
   fields: [
-    { name: "user", type: "relationship", relationTo: "users", required: true, index: true },
+    // Необязателен по той же причине, что и в `activity`: `SET NULL` на
+    // `NOT NULL` не ложится. Здесь это к тому же сохраняет историю расходов —
+    // общий лимит сервиса считается по ней, и обнулять его с уходом человека
+    // было бы неверно. Поломка тут давняя, просто не срабатывала: записи
+    // появляются только при платной генерации, а `activity` пишется всегда.
+    { name: "user", type: "relationship", relationTo: "users", index: true },
     { name: "project", type: "relationship", relationTo: "projects", index: true },
     {
       name: "kind",
@@ -659,7 +664,21 @@ export const Activity: CollectionConfig = {
     delete: adminOnly,
   },
   fields: [
-    { name: "user", type: "relationship", relationTo: "users", required: true, index: true },
+    /**
+     * Пользователь необязателен НАМЕРЕННО, хотя пишем мы всегда с ним.
+     *
+     * У внешнего ключа стоит `ON DELETE SET NULL`. С `required: true`
+     * колонка выходит `NOT NULL`, и удаление пользователя падает на первой
+     * же его записи — то есть человека, попросившего себя удалить, удалить
+     * нельзя. Поймано сквозным тестом; ни один модульный не заметил,
+     * потому что чистил за собой в правильном порядке.
+     *
+     * Обнуление здесь лучше каскадного удаления: воронка отвечает на вопрос
+     * «сколько проектов дошло до озвучки», и ответ не должен меняться задним
+     * числом оттого, что кто-то ушёл. Связь с человеком при этом рвётся —
+     * для ушедшего это ровно то, что нужно.
+     */
+    { name: "user", type: "relationship", relationTo: "users", index: true },
     { name: "project", type: "relationship", relationTo: "projects", index: true },
     {
       name: "step",

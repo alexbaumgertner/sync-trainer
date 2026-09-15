@@ -37,6 +37,20 @@ export default function ScriptEditor({
   const [showSource, setShowSource] = useState(false);
 
   /**
+   * Что сказать вслух (доступность).
+   *
+   * Отдельное состояние, а не `role="status"` на самих блоках, и вот почему.
+   * Живая область объявляет ИЗМЕНЕНИЕ своего содержимого, а блок «синтез
+   * идёт» рисуется только пока идёт и исчезает вместе с работой. Главный
+   * момент — «аудио готово» — не объявлялся вовсе: объявлять было нечему,
+   * элемент к тому времени размонтировался, а страница перечитывалась.
+   *
+   * Поэтому область одна, живёт в разметке всегда и пуста, пока сказать
+   * нечего. Меняется только текст внутри — это и слышно.
+   */
+  const [announcement, setAnnouncement] = useState("");
+
+  /**
    * U3: состояние синтеза живёт в базе, а не во вкладке. Поэтому страницу
    * можно закрыть, а при открытии мы спрашиваем, не идёт ли работа, — и если
    * идёт, продолжаем ждать так же, как если бы её запустили только что.
@@ -83,6 +97,9 @@ export default function ScriptEditor({
         } else if (audio?.status === "failed") {
           setInterrupted(audio.error ?? "Синтез не удался.");
         } else if (wasRunning && audio?.status === "done") {
+          // Ради этой строки всё и затевалось: до неё об окончании работы,
+          // которая идёт минутами, человек со скринридером не узнавал никак.
+          setAnnouncement("Аудио готово. Файл появился на странице.");
           // Файл появился, пока вкладка ждала, — страницу нужно перечитать.
           router.refresh();
         }
@@ -261,24 +278,43 @@ export default function ScriptEditor({
               : "Синтезировать аудио"}
         </button>
 
-        {running && (
-          <p className="mt-3 max-w-prose text-xs text-neutral-500" role="status">
-            Работа идёт на сервере — страницу можно закрыть и вернуться позже.
-            Готовый файл появится здесь сам.
-          </p>
-        )}
+        {/*
+          Одна живая область на все сообщения о ходе работы, обёрткой над
+          видимыми блоками. Не второй копией текста рядом: копия читается
+          дважды и ломает поиск по тексту на странице.
 
-        {interrupted && !running && (
-          <div
-            className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200"
-            role="status"
-          >
-            {interrupted}
-          </div>
-        )}
+          `role="status"` с самих блоков снят — его давал каждый блок
+          в отдельности, и объявлялось то, что появлялось вместе со своей
+          областью, то есть ненадёжно. Обёртка живёт в разметке всегда.
+
+          `display: contents` для обёртки не годится, хотя напрашивается:
+          часть браузеров вместе с боксом убирает элемент и из дерева
+          доступности, а для живой области это равно её отсутствию.
+        */}
+        <div aria-live="polite" className="flex flex-col gap-4 empty:hidden">
+          {running && (
+            <p className="mt-3 max-w-prose text-xs text-neutral-500">
+              Работа идёт на сервере — страницу можно закрыть и вернуться позже.
+              Готовый файл появится здесь сам.
+            </p>
+          )}
+
+          {interrupted && !running && (
+            <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+              {interrupted}
+            </div>
+          )}
+
+          {/* Окончание — единственное, чему нет видимого выражения: файл
+              просто появляется на перечитанной странице. */}
+          {announcement && <p className="sr-only">{announcement}</p>}
+        </div>
 
         {error && (
-          <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
+          <div
+            role="alert"
+            className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200"
+          >
             {error}
             {issues.length > 0 && (
               <ul className="mt-2 list-disc pl-4 text-xs">

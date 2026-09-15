@@ -25,9 +25,15 @@ test.describe("доступ без входа", () => {
     expect(response.status()).toBe(401);
   });
 
-  test("админка Payload требует входа", async ({ page }) => {
+  test("админка уводит на вход приложения", async ({ page }) => {
+    // Тест ждал страниц Payload `/admin/login` и `/admin/create-first-user`.
+    // Их больше нет: паролей в системе не осталось, а `src/proxy.ts`
+    // разворачивает постороннего до отрисовки оболочки. Тест описывал
+    // поведение, которого нет, и краснел с тех пор незамеченным —
+    // сквозные проверки не входят в список перед коммитом.
     await page.goto("/admin");
-    await expect(page).toHaveURL(/\/admin\/(login|create-first-user)/);
+    await expect(page).toHaveURL("/");
+    await expect(page.getByLabel("Почта")).toBeVisible();
   });
 });
 
@@ -67,6 +73,8 @@ test.describe("приглашения", () => {
   test("недействительная ссылка объясняет, что делать", async ({ page }) => {
     await page.goto("/invite/заведомо-негодный-токен");
     await expect(page.getByText("Ссылка не сработала")).toBeVisible();
-    await expect(page.getByRole("link", { name: "Ко входу" })).toBeVisible();
+    // Подпись на кнопке сменилась вместе с отказом от паролей: ведёт она
+    // не «ко входу» вообще, а именно ко входу по коду.
+    await expect(page.getByRole("link", { name: "Войти по коду" })).toBeVisible();
   });
 });
