@@ -431,7 +431,7 @@ export interface Engagement {
          * Кабина или роль
          */
         booth?: string | null;
-        status: 'listed' | 'invited' | 'confirmed' | 'disputed' | 'withdrawn';
+        status: 'listed' | 'invited' | 'reminded' | 'confirmed' | 'disputed' | 'withdrawn';
         confirmedAt?: string | null;
         note?: string | null;
         id?: string | null;

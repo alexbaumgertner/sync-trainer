@@ -40,6 +40,7 @@ export const WENT_LABELS: Record<number, string> = {
 export const MEMBER_STATUS_LABELS: Record<string, string> = {
   listed: "не подтверждён",
   invited: "приглашён",
+  reminded: "напомнили, ответа нет",
   confirmed: "подтвердил",
   disputed: "оспорил",
   withdrawn: "отозвал согласие",
@@ -52,7 +53,12 @@ export const MEMBER_STATUS_LABELS: Record<string, string> = {
  * его там не было, во втором забрал согласие на упоминание. Ни то, ни другое
  * не должно показываться как факт (C3, C5).
  */
-export const ACTIVE_MEMBER_STATUSES = ["listed", "invited", "confirmed"] as const;
+export const ACTIVE_MEMBER_STATUSES = [
+  "listed",
+  "invited",
+  "reminded",
+  "confirmed",
+] as const;
 
 export interface TeamMember {
   name: string;

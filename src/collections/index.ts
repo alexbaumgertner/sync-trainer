@@ -744,6 +744,7 @@ const Engagements: CollectionConfig = {
           options: [
             { label: "Назван", value: "listed" },
             { label: "Приглашён", value: "invited" },
+            { label: "Напомнили", value: "reminded" },
             { label: "Подтвердил", value: "confirmed" },
             { label: "Оспорил", value: "disputed" },
             { label: "Отозвал согласие", value: "withdrawn" },
