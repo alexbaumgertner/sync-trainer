@@ -6,6 +6,7 @@ import * as migration_20260915_drop_passwords from './20260915_drop_passwords';
 import * as migration_20260915_debrief_reminder from './20260915_debrief_reminder';
 import * as migration_20260915_profile from './20260915_profile';
 import * as migration_20260915_engagements from './20260915_engagements';
+import * as migration_20260915_engagement_team from './20260915_engagement_team';
 
 export const migrations = [
   {
@@ -47,5 +48,10 @@ export const migrations = [
     up: migration_20260915_engagements.up,
     down: migration_20260915_engagements.down,
     name: '20260915_engagements',
+  },
+  {
+    up: migration_20260915_engagement_team.up,
+    down: migration_20260915_engagement_team.down,
+    name: '20260915_engagement_team',
   },
 ];

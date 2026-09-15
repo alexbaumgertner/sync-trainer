@@ -705,6 +705,54 @@ const Engagements: CollectionConfig = {
           "W6. Уровень «заказчику» добавится сюда, когда появится сторона заказчика",
       },
     },
+
+    /**
+     * Команда события (W3).
+     *
+     * Имя — всегда, связь с учётной записью — если адрес совпал. Такой порядок
+     * позволяет записать команду сразу, не дожидаясь, пока коллеги заведутся
+     * в сервисе, и дорастить связь потом.
+     *
+     * `status` заложен под R2-4 целиком, чтобы подтверждение не потребовало
+     * второй миграции. Пока запись создаётся со `listed`: «назван, но никем
+     * не подтверждён» — и показывать её надо именно так (C2).
+     */
+    {
+      name: "team",
+      type: "array",
+      admin: { description: "W3: кто ещё переводил" },
+      fields: [
+        { name: "name", type: "text", required: true },
+        {
+          name: "email",
+          type: "email",
+          admin: { description: "По нему связываем с учётной записью" },
+        },
+        {
+          name: "user",
+          type: "relationship",
+          relationTo: "users",
+          index: true,
+          admin: { description: "Связь появляется, когда адрес совпал" },
+        },
+        { name: "booth", type: "text", admin: { description: "Кабина или роль" } },
+        {
+          name: "status",
+          type: "select",
+          required: true,
+          defaultValue: "listed",
+          options: [
+            { label: "Назван", value: "listed" },
+            { label: "Приглашён", value: "invited" },
+            { label: "Подтвердил", value: "confirmed" },
+            { label: "Оспорил", value: "disputed" },
+            { label: "Отозвал согласие", value: "withdrawn" },
+          ],
+        },
+        { name: "confirmedAt", type: "date", admin: { readOnly: true } },
+        { name: "note", type: "text" },
+      ],
+    },
   ],
 };
 

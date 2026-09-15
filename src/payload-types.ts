@@ -413,6 +413,30 @@ export interface Engagement {
    * W6. Уровень «заказчику» добавится сюда, когда появится сторона заказчика
    */
   visibility: 'private' | 'team';
+  /**
+   * W3: кто ещё переводил
+   */
+  team?:
+    | {
+        name: string;
+        /**
+         * По нему связываем с учётной записью
+         */
+        email?: string | null;
+        /**
+         * Связь появляется, когда адрес совпал
+         */
+        user?: (number | null) | User;
+        /**
+         * Кабина или роль
+         */
+        booth?: string | null;
+        status: 'listed' | 'invited' | 'confirmed' | 'disputed' | 'withdrawn';
+        confirmedAt?: string | null;
+        note?: string | null;
+        id?: string | null;
+      }[]
+    | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -742,6 +766,18 @@ export interface EngagementsSelect<T extends boolean = true> {
         id?: T;
       };
   visibility?: T;
+  team?:
+    | T
+    | {
+        name?: T;
+        email?: T;
+        user?: T;
+        booth?: T;
+        status?: T;
+        confirmedAt?: T;
+        note?: T;
+        id?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
 }

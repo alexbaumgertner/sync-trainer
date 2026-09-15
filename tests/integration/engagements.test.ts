@@ -31,7 +31,7 @@ const { issueToken } = await import("@/lib/session");
 const { createEngagement, updateEngagement, deleteEngagement } = await import(
   "@/app/(frontend)/experience/actions"
 );
-const { toRow, yearOf, WENT_LABELS } = await import("@/lib/engagements");
+const { toRow, yearOf, WENT_LABELS, canSee, activeTeam } = await import("@/lib/engagements");
 
 const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 let payload: Awaited<ReturnType<typeof payloadClient>>;
@@ -280,6 +280,149 @@ describe("подписи оценки", () => {
     // Голая шкала 1–5 несопоставима: у каждого своя четвёрка.
     for (const value of [1, 2, 3, 4, 5]) {
       expect(WENT_LABELS[value]).toBeTruthy();
+    }
+  });
+});
+
+describe("команда события (W3, W6)", () => {
+  const withTeam = (over: Record<string, string | string[]> = {}) =>
+    form({
+      ...base,
+      memberName: ["Анна Иванова", "Пётр Смирнов"],
+      memberEmail: [`eng-stranger-${stamp}@example.test`, ""],
+      memberBooth: ["кабина RU", "кабина DE"],
+      ...over,
+    });
+
+  it("связывает по адресу и оставляет текстом, если учётной записи нет", async () => {
+    const id = idFrom(await run(createEngagement, withTeam()));
+    const team = toRow(await load(id)).team;
+
+    expect(team).toHaveLength(2);
+    // Совпал адрес — появилась связь.
+    expect(team[0].userId).toBe(stranger);
+    expect(team[0].booth).toBe("кабина RU");
+    // Адреса нет — остаётся имя, и это нормальный, а не ущербный случай.
+    expect(team[1].userId).toBeNull();
+    expect(team[1].name).toBe("Пётр Смирнов");
+  });
+
+  it("по имени не связывает — однофамильцев хватает", async () => {
+    const id = idFrom(
+      await run(
+        createEngagement,
+        form({ ...base, memberName: ["Анна Иванова"], memberEmail: [""], memberBooth: [""] }),
+      ),
+    );
+    expect(toRow(await load(id)).team[0].userId).toBeNull();
+  });
+
+  it("новый участник заводится неподтверждённым", async () => {
+    // C2: пока никто не подтвердил, это заявление владельца, а не факт.
+    const id = idFrom(await run(createEngagement, withTeam()));
+    expect(toRow(await load(id)).team.every((m) => m.status === "listed")).toBe(true);
+  });
+
+  it("правка списка не сбрасывает чужое подтверждение", async () => {
+    const id = idFrom(await run(createEngagement, withTeam()));
+
+    // Коллега подтвердил — это его действие, а не владельца.
+    const doc = await load(id);
+    const team = (doc.team ?? []).map((m, i) =>
+      i === 0 ? { ...m, status: "confirmed" as const, confirmedAt: new Date().toISOString() } : m,
+    );
+    await payload.update({ collection: "engagements", id, data: { team }, overrideAccess: true });
+
+    // Владелец правит запись: меняет кабину, подтверждение трогать не должен.
+    await run(
+      updateEngagement,
+      withTeam({ id: String(id), memberBooth: ["кабина EN", "кабина DE"] }),
+    );
+
+    const after = toRow(await load(id)).team;
+    expect(after[0].status).toBe("confirmed");
+    expect(after[0].confirmedAt).toBeTruthy();
+    expect(after[0].booth).toBe("кабина EN");
+  });
+
+  it("участники без имени и повторы отбрасываются", async () => {
+    const id = idFrom(
+      await run(
+        createEngagement,
+        form({
+          ...base,
+          memberName: ["Анна", "  ", "анна"],
+          memberEmail: ["", "", ""],
+          memberBooth: ["", "", ""],
+        }),
+      ),
+    );
+    expect(toRow(await load(id)).team).toHaveLength(1);
+  });
+});
+
+describe("кто видит запись", () => {
+  const make = async (visibility: string, memberUser: number | null) =>
+    payload.create({
+      collection: "engagements",
+      data: {
+        title: `Видимость ${stamp}`,
+        owner,
+        heldOn: "2026-04-01",
+        mode: "simultaneous",
+        sourceLang: "en",
+        targetLang: "ru",
+        visibility: visibility as "team" | "private",
+        team: [
+          {
+            name: "Коллега",
+            user: memberUser ?? undefined,
+            status: "listed",
+          },
+        ],
+      },
+      overrideAccess: true,
+    });
+
+  it("связанный участник видит запись, открытую команде", async () => {
+    const doc = await make("team", stranger);
+    expect(canSee(toRow(doc), owner, stranger)).toBe(true);
+  });
+
+  it("названный текстом, но не связанный, не видит", async () => {
+    // Совпадение имени — не основание показывать чужую работу.
+    const doc = await make("team", null);
+    expect(canSee(toRow(doc), owner, stranger)).toBe(false);
+  });
+
+  it("закрытую запись не видит никто, кроме владельца", async () => {
+    const doc = await make("private", stranger);
+    expect(canSee(toRow(doc), owner, stranger)).toBe(false);
+    expect(canSee(toRow(doc), owner, owner)).toBe(true);
+  });
+
+  it("оспоривший и отозвавший согласие теряют доступ и уходят из команды", async () => {
+    for (const status of ["disputed", "withdrawn"] as const) {
+      const doc = await payload.create({
+        collection: "engagements",
+        data: {
+          title: `Спор ${status} ${stamp}`,
+          owner,
+          heldOn: "2026-04-02",
+          mode: "simultaneous",
+          sourceLang: "en",
+          targetLang: "ru",
+          visibility: "team",
+          team: [{ name: "Коллега", user: stranger, status }],
+        },
+        overrideAccess: true,
+      });
+
+      const row = toRow(doc);
+      // Оспорил — говорит, что его там не было. Отозвал — забрал согласие
+      // на упоминание. Ни то, ни другое не показывается как факт.
+      expect(canSee(row, owner, stranger)).toBe(false);
+      expect(activeTeam(row)).toHaveLength(0);
     }
   });
 });

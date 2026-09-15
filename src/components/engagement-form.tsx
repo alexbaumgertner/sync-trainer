@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { PROFILE_LANGS } from "@/lib/profile";
-import { MODES, WENT_LABELS, type Speaker } from "@/lib/engagements";
+import { MODES, WENT_LABELS, MEMBER_STATUS_LABELS, type Speaker, type TeamMember } from "@/lib/engagements";
 
 const FIELD =
   "w-full rounded-md border border-neutral-300 bg-transparent px-3 py-2 text-sm dark:border-neutral-700";
@@ -19,6 +19,7 @@ export interface EngagementFormValues {
   wentHow: number | null;
   wentText: string;
   speakers: Speaker[];
+  team: TeamMember[];
   visibility: string;
 }
 
@@ -32,6 +33,10 @@ export default function EngagementForm({
   submitLabel: string;
 }) {
   const [speakers, setSpeakers] = useState<Speaker[]>(values.speakers);
+  const [team, setTeam] = useState<TeamMember[]>(values.team);
+
+  const setMember = (index: number, patch: Partial<TeamMember>) =>
+    setTeam((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
 
   const setSpeaker = (index: number, patch: Partial<Speaker>) =>
     setSpeakers((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -145,6 +150,75 @@ export default function EngagementForm({
           </select>
         </div>
       </div>
+
+      <fieldset className="grid gap-2">
+        <legend className="text-sm font-medium">Кто переводил</legend>
+        <p className="mb-1 text-xs text-neutral-500">
+          Имя обязательно, адрес — нет. Если адрес совпадёт с учётной записью
+          коллеги, запись свяжется с ним и он сможет её подтвердить. По имени
+          не связываем: однофамильцев хватает, а ошибка приписала бы человеку
+          чужую работу.
+        </p>
+
+        {team.map((member, index) => (
+          <div key={index} className="grid gap-2">
+            <div className="flex items-center gap-2">
+              <input
+                name="memberName"
+                value={member.name}
+                onChange={(e) => setMember(index, { name: e.target.value })}
+                placeholder="Имя"
+                aria-label={`Имя участника ${index + 1}`}
+                className={FIELD}
+              />
+              <input
+                name="memberEmail"
+                type="email"
+                value={member.email ?? ""}
+                onChange={(e) => setMember(index, { email: e.target.value })}
+                placeholder="почта, необязательно"
+                aria-label={`Почта участника ${index + 1}`}
+                className={FIELD}
+              />
+              <input
+                name="memberBooth"
+                value={member.booth ?? ""}
+                onChange={(e) => setMember(index, { booth: e.target.value })}
+                placeholder="кабина"
+                aria-label={`Кабина участника ${index + 1}`}
+                className={FIELD}
+              />
+              <button
+                type="button"
+                onClick={() => setTeam((rows) => rows.filter((_, i) => i !== index))}
+                aria-label={`Убрать участника ${index + 1}`}
+                className="rounded border border-neutral-300 px-2 py-1 text-xs text-neutral-500 hover:border-neutral-500 dark:border-neutral-700"
+              >
+                Убрать
+              </button>
+            </div>
+            {member.name && (
+              <p className="text-xs text-neutral-500">
+                {member.userId ? "связан с учётной записью" : "не связан"} ·{" "}
+                {MEMBER_STATUS_LABELS[member.status] ?? member.status}
+              </p>
+            )}
+          </div>
+        ))}
+
+        <button
+          type="button"
+          onClick={() =>
+            setTeam((rows) => [
+              ...rows,
+              { name: "", email: "", userId: null, booth: "", status: "listed", confirmedAt: null },
+            ])
+          }
+          className="justify-self-start rounded border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+        >
+          Добавить участника
+        </button>
+      </fieldset>
 
       <fieldset className="grid gap-2">
         <legend className="text-sm font-medium">Кто выступал</legend>

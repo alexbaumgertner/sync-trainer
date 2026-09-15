@@ -14,16 +14,34 @@ export default async function ExperiencePage() {
   if (!user) redirect("/");
 
   const payload = await payloadClient();
+
+  // Свои записи и те, где я назван в команде и связан учётной записью (W6).
+  // Названный текстом, но не связанный, чужой записи не видит: мы не знаем,
+  // тот ли это человек, а совпадение имени — не основание.
   const found = await payload.find({
     collection: "engagements",
-    where: { owner: { equals: user.id } },
+    where: {
+      or: [
+        { owner: { equals: user.id } },
+        {
+          and: [
+            { "team.user": { equals: user.id } },
+            { "team.status": { in: ["listed", "invited", "confirmed"] } },
+            { visibility: { equals: "team" } },
+          ],
+        },
+      ],
+    },
     sort: "-heldOn",
     limit: 500,
     depth: 0,
     overrideAccess: true,
   });
 
-  const rows = found.docs.map(toRow);
+  const rows = found.docs.map((doc) => ({
+    ...toRow(doc),
+    mine: (typeof doc.owner === "object" ? doc.owner?.id : doc.owner) === user.id,
+  }));
   const years = rows.map((r) => yearOf(r.heldOn));
 
   return (
@@ -75,6 +93,7 @@ export default async function ExperiencePage() {
                     {row.location && <span>{row.location}</span>}
                     {row.wentHow && <span>{WENT_LABELS[row.wentHow]}</span>}
                     {row.visibility === "private" && <span>только я</span>}
+                    {!row.mine && <span>меня назвали в команде</span>}
                   </div>
                 </Link>
               </li>

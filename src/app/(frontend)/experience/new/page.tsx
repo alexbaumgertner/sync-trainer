@@ -53,6 +53,7 @@ export default async function NewEngagementPage({
           wentHow: null,
           wentText: "",
           speakers: [],
+          team: [],
           visibility: "team",
         }}
       />

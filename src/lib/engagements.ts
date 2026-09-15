@@ -37,6 +37,33 @@ export const WENT_LABELS: Record<number, string> = {
   5: "отлично, пошёл бы снова",
 };
 
+export const MEMBER_STATUS_LABELS: Record<string, string> = {
+  listed: "не подтверждён",
+  invited: "приглашён",
+  confirmed: "подтвердил",
+  disputed: "оспорил",
+  withdrawn: "отозвал согласие",
+};
+
+/**
+ * Статусы, при которых участник считается частью команды.
+ *
+ * Оспоренное и отозванное — не команда: в первом случае человек говорит, что
+ * его там не было, во втором забрал согласие на упоминание. Ни то, ни другое
+ * не должно показываться как факт (C3, C5).
+ */
+export const ACTIVE_MEMBER_STATUSES = ["listed", "invited", "confirmed"] as const;
+
+export interface TeamMember {
+  name: string;
+  email: string | null;
+  /** Связь появляется, когда адрес совпал с учётной записью */
+  userId: number | null;
+  booth: string | null;
+  status: string;
+  confirmedAt: string | null;
+}
+
 export interface Speaker {
   name: string;
   organization: string | null;
@@ -54,6 +81,7 @@ export interface EngagementRow {
   wentHow: number | null;
   wentText: string | null;
   speakers: Speaker[];
+  team: TeamMember[];
   visibility: string;
   /** Есть ли подготовка в тренажёре. Записи без проекта — норма (W2) */
   projectId: number | null;
@@ -76,6 +104,19 @@ export function toRow(doc: Engagement): EngagementRow {
     speakers: (doc.speakers ?? [])
       .filter((s) => s.name?.trim())
       .map((s) => ({ name: s.name!.trim(), organization: s.organization?.trim() || null })),
+    team: (doc.team ?? [])
+      .filter((m) => m.name?.trim())
+      .map((m) => {
+        const userId = typeof m.user === "object" ? (m.user?.id ?? null) : (m.user ?? null);
+        return {
+          name: m.name!.trim(),
+          email: m.email?.trim() || null,
+          userId: typeof userId === "number" ? userId : null,
+          booth: m.booth?.trim() || null,
+          status: m.status,
+          confirmedAt: m.confirmedAt ?? null,
+        };
+      }),
     visibility: doc.visibility,
     projectId: typeof projectId === "number" ? projectId : null,
   };
@@ -90,3 +131,28 @@ export const formatHeld = (heldOn: string): string =>
     month: "long",
     year: "numeric",
   });
+
+/**
+ * Видит ли этот человек запись (W6).
+ *
+ * Владелец — всегда. Связанный участник — если запись открыта команде.
+ * Названный текстом, но не связанный, не видит ничего: мы не знаем, тот ли
+ * это человек, а показывать чужую запись по совпадению имени нельзя.
+ */
+export function canSee(
+  row: Pick<EngagementRow, "team" | "visibility">,
+  ownerId: number,
+  viewerId: number,
+): boolean {
+  if (ownerId === viewerId) return true;
+  if (row.visibility !== "team") return false;
+  return row.team.some(
+    (member) =>
+      member.userId === viewerId &&
+      (ACTIVE_MEMBER_STATUSES as readonly string[]).includes(member.status),
+  );
+}
+
+/** Участники, которых можно показывать как команду. */
+export const activeTeam = (row: Pick<EngagementRow, "team">): TeamMember[] =>
+  row.team.filter((m) => (ACTIVE_MEMBER_STATUSES as readonly string[]).includes(m.status));
