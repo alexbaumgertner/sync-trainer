@@ -5,7 +5,10 @@ import { revalidatePath } from "next/cache";
 import { currentUser } from "@/lib/auth";
 import { payloadClient } from "@/lib/payload";
 import { PROFILE_LANGS } from "@/lib/profile";
-import { MODE_LABELS } from "@/lib/engagements";
+import { MODE_LABELS, formatHeld } from "@/lib/engagements";
+import { sendEmail, emailConfigured, teamMentionEmail } from "@/lib/email";
+import { appBaseUrl } from "@/lib/invite-token";
+import { displayNameOf } from "@/lib/profile";
 import type { Engagement } from "@/payload-types";
 
 const LANGS = new Set(PROFILE_LANGS.map((l) => l.value));
@@ -151,6 +154,8 @@ export async function createEngagement(formData: FormData): Promise<void> {
     overrideAccess: true,
   });
 
+  await inviteTeam(payload, created.id, user.id);
+
   revalidatePath("/experience");
   redirect(`/experience/${created.id}?saved=1`);
 }
@@ -189,6 +194,8 @@ export async function updateEngagement(formData: FormData): Promise<void> {
     overrideAccess: true,
   });
 
+  await inviteTeam(payload, id, user.id);
+
   revalidatePath("/experience");
   redirect(`/experience/${id}?saved=1`);
 }
@@ -212,4 +219,74 @@ export async function deleteEngagement(formData: FormData): Promise<void> {
 
   revalidatePath("/experience");
   redirect("/experience");
+}
+
+/**
+ * Зовёт связанных участников ответить (C1).
+ *
+ * Пишем только тем, кого связали с учётной записью и кто ещё не отвечал:
+ * `listed` — назван, но не потревожен. После письма он `invited`, и второе
+ * письмо ему уже не уйдёт.
+ *
+ * Отказ почты не срывает сохранение: запись важнее уведомления, а
+ * неотправленное письмо доберётся напоминанием (C6).
+ */
+async function inviteTeam(
+  payload: Awaited<ReturnType<typeof payloadClient>>,
+  engagementId: number,
+  byUserId: number,
+): Promise<void> {
+  if (!emailConfigured()) return;
+
+  const doc = await payload
+    .findByID({ collection: "engagements", id: engagementId, depth: 0, overrideAccess: true })
+    .catch(() => null);
+  if (!doc) return;
+
+  const author = await payload
+    .findByID({ collection: "users", id: byUserId, depth: 0, overrideAccess: true })
+    .catch(() => null);
+  const who = author ? displayNameOf(author) : "Коллега";
+
+  const team = (doc.team ?? []) as Member[];
+  const next = [...team];
+  let changed = false;
+
+  for (let i = 0; i < next.length; i++) {
+    const member = next[i];
+    const userId = typeof member.user === "object" ? member.user?.id : member.user;
+    if (typeof userId !== "number" || member.status !== "listed") continue;
+    if (userId === byUserId) continue;
+
+    const person = await payload
+      .findByID({ collection: "users", id: userId, depth: 0, overrideAccess: true })
+      .catch(() => null);
+    if (!person?.email) continue;
+
+    try {
+      await sendEmail({
+        to: person.email,
+        ...teamMentionEmail({
+          who,
+          event: doc.title,
+          heldOn: formatHeld(doc.heldOn),
+          url: `${appBaseUrl()}/experience/${engagementId}`,
+        }),
+      });
+      next[i] = { ...member, status: "invited" as Member["status"] };
+      changed = true;
+    } catch (error) {
+      // Письмо не ушло — оставляем `listed`, напоминание попробует позже.
+      console.error("[experience] письмо участнику не ушло", userId, error);
+    }
+  }
+
+  if (changed) {
+    await payload.update({
+      collection: "engagements",
+      id: engagementId,
+      data: { team: next },
+      overrideAccess: true,
+    });
+  }
 }

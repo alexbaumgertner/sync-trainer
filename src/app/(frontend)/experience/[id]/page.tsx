@@ -8,6 +8,11 @@ import EngagementForm from "@/components/engagement-form";
 import { toRow, canSee, activeTeam, MODE_LABELS, MEMBER_STATUS_LABELS, WENT_LABELS, formatHeld } from "@/lib/engagements";
 import { LANG_LABEL } from "@/lib/profile";
 import { updateEngagement, deleteEngagement } from "../actions";
+import {
+  confirmParticipation,
+  disputeParticipation,
+  withdrawParticipation,
+} from "./confirm-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -17,13 +22,13 @@ export default async function EngagementPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; error?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; answered?: string }>;
 }) {
   const user = await currentUser();
   if (!user) redirect("/");
 
   const { id } = await params;
-  const { saved, error } = await searchParams;
+  const { saved, error, answered } = await searchParams;
   const engagementId = Number(id);
   if (!Number.isInteger(engagementId)) notFound();
 
@@ -51,9 +56,73 @@ export default async function EngagementPage({
           </Link>
         </div>
 
-        <p className="mb-6 text-sm text-neutral-500">
+        <p className="mb-6 max-w-prose text-sm text-neutral-500">
           Запись завёл другой участник события, и вас назвали в команде.
         </p>
+
+        {answered === "confirmed" && (
+          <p role="status" className="mb-6 rounded-lg border border-neutral-200 px-4 py-2.5 text-sm dark:border-neutral-800">
+            Участие подтверждено. Теперь это не заявление владельца записи, а факт,
+            подтверждённый вами.
+          </p>
+        )}
+
+        {(() => {
+          const me = row.team.find((m) => m.userId === user.id);
+          if (!me) return null;
+
+          if (me.status === "confirmed") {
+            return (
+              <div className="mb-8 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+                <p className="text-sm">Вы подтвердили участие.</p>
+                <p className="mt-1 max-w-prose text-xs text-neutral-500">
+                  Подтверждение — это ещё и согласие на упоминание. Его можно отозвать:
+                  тогда имя уйдёт из записи.
+                </p>
+                <form action={withdrawParticipation} className="mt-3">
+                  <input type="hidden" name="id" value={row.id} />
+                  <button
+                    type="submit"
+                    className="rounded border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+                  >
+                    Отозвать согласие
+                  </button>
+                </form>
+              </div>
+            );
+          }
+
+          return (
+            <div className="mb-8 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+              <p className="text-sm font-medium">Вы действительно переводили на этом событии?</p>
+              <p className="mt-1 max-w-prose text-xs text-neutral-500">
+                Пока вы не ответили, участие показывается как неподтверждённое: это
+                заявление владельца записи, а не факт. Подтверждение — заодно согласие
+                на то, чтобы вас здесь упоминали.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <form action={confirmParticipation}>
+                  <input type="hidden" name="id" value={row.id} />
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+                  >
+                    Да, подтверждаю
+                  </button>
+                </form>
+                <form action={disputeParticipation}>
+                  <input type="hidden" name="id" value={row.id} />
+                  <button
+                    type="submit"
+                    className="rounded-lg border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+                  >
+                    Меня там не было
+                  </button>
+                </form>
+              </div>
+            </div>
+          );
+        })()}
 
         <dl className="grid max-w-2xl gap-5 text-sm">
           <div>

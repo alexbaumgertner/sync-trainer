@@ -131,6 +131,41 @@ export function inviteEmail(
   };
 }
 
+/**
+ * Вас назвали в команде события (C1).
+ *
+ * Письмо обязано звать к действию, а не просто уведомлять: пока человек
+ * не ответил, участие показывается как неподтверждённое, то есть как
+ * заявление владельца записи. Ответ превращает его в факт.
+ */
+export function teamMentionEmail(args: {
+  who: string;
+  event: string;
+  heldOn: string;
+  url: string;
+}): { subject: string; text: string; html: string } {
+  return {
+    subject: `Вас назвали в команде: ${args.event}`,
+    text: [
+      `${args.who} завёл запись о событии «${args.event}» (${args.heldOn}) и указал вас в команде.`,
+      "",
+      "Подтвердите участие или скажите, что вас там не было:",
+      args.url,
+      "",
+      "Пока вы не ответили, участие показывается как неподтверждённое.",
+      "Подтверждение — заодно согласие на то, чтобы вас упоминали; его можно отозвать.",
+    ].join("\n"),
+    html: shell(
+      [
+        `<p style="margin:0 0 1rem">${escapeHtml(args.who)} завёл запись о событии `,
+        `<b>${escapeHtml(args.event)}</b> (${escapeHtml(args.heldOn)}) и указал вас в команде.</p>`,
+        `<p style="margin:0 0 1.25rem"><a href="${escapeHtml(args.url)}" style="display:inline-block;background:#171717;color:#fff;text-decoration:none;padding:.65rem 1.1rem;border-radius:.5rem">Подтвердить или оспорить</a></p>`,
+      ].join(""),
+      "Пока вы не ответили, участие показывается как неподтверждённое. Подтверждение — заодно согласие на упоминание, и его можно отозвать.",
+    ),
+  };
+}
+
 const escapeHtml = (value: string): string =>
   value
     .replace(/&/g, "&amp;")
