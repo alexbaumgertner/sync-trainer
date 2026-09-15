@@ -8,6 +8,7 @@ import * as migration_20260915_profile from './20260915_profile';
 import * as migration_20260915_engagements from './20260915_engagements';
 import * as migration_20260915_engagements_team from './20260915_engagements_team';
 import * as migration_20260915_team_reminded from './20260915_team_reminded';
+import * as migration_20260915_zz_locked_engagements from './20260915_zz_locked_engagements';
 
 export const migrations = [
   {
@@ -59,5 +60,10 @@ export const migrations = [
     up: migration_20260915_team_reminded.up,
     down: migration_20260915_team_reminded.down,
     name: '20260915_team_reminded',
+  },
+  {
+    up: migration_20260915_zz_locked_engagements.up,
+    down: migration_20260915_zz_locked_engagements.down,
+    name: '20260915_zz_locked_engagements',
   },
 ];
