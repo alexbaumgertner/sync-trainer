@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getClient, explainError, hasCredentials, NO_CREDENTIALS } from "@/lib/google-tts";
 import { guard } from "@/lib/auth";
-import { FALLBACK_VOICES, makeVoiceOption, type VoiceOption } from "@/lib/voices";
+import { FALLBACK_VOICES } from "@/lib/voices";
+import { forLanguage, listVoicesCached } from "@/lib/voice-catalogue";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,19 +18,20 @@ export async function GET(request: Request) {
   }
 
   try {
-    const [response] = await getClient().listVoices({});
-    const voices: VoiceOption[] = (response.voices ?? [])
-      .flatMap((v) => {
-        const name = v.name ?? "";
-        const languageCode = v.languageCodes?.[0] ?? "";
-        if (!name || !languageCode.startsWith(prefix)) return [];
-        return [makeVoiceOption(name, languageCode, String(v.ssmlGender ?? "NEUTRAL"))];
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
+    // Каталог кэшируется на сутки: он меняется хорошо если раз в месяц,
+    // а ходил в Google на каждый запрос — круговой путь на критическом пути.
+    const { voices, source } = await listVoicesCached(async () => {
+      const [response] = await getClient().listVoices({});
+      return response.voices ?? [];
+    });
 
-    return NextResponse.json({ voices: voices.length ? voices : FALLBACK_VOICES, source: "google" });
+    const forThisLanguage = forLanguage(voices, prefix);
+    return NextResponse.json({
+      voices: forThisLanguage.length ? forThisLanguage : FALLBACK_VOICES,
+      source,
+    });
   } catch (error) {
-    // Без кредов UI всё равно должен открываться и показывать список.
+    // Без кредов и при отказе Google интерфейс всё равно должен открываться.
     return NextResponse.json({
       voices: FALLBACK_VOICES,
       source: "fallback",
