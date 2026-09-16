@@ -347,6 +347,18 @@ export interface GlossaryTerm {
   verifiedBy?: (number | null) | User;
   verifiedAt?: string | null;
   /**
+   * Запасные эквиваленты: кто предложил и почему
+   */
+  variants?:
+    | {
+        text: string;
+        proposedBy?: (number | null) | User;
+        note?: string | null;
+        at?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  /**
    * E1: термин действительно прозвучал на событии
    */
   occurredAtEvent?: boolean | null;
@@ -782,6 +794,15 @@ export interface GlossaryTermsSelect<T extends boolean = true> {
   proposedBy?: T;
   verifiedBy?: T;
   verifiedAt?: T;
+  variants?:
+    | T
+    | {
+        text?: T;
+        proposedBy?: T;
+        note?: T;
+        at?: T;
+        id?: T;
+      };
   occurredAtEvent?: T;
   updatedAt?: T;
   createdAt?: T;

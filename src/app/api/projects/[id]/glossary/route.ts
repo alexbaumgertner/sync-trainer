@@ -84,6 +84,12 @@ export async function GET(
     target: term.targetTerm ?? null,
     note: term.note ?? null,
     status: term.status,
+    // Варианты едут в колонку примечаний: она единственная, которую
+    // InterpretBank покажет рядом с термином. Вариант, оставшийся в
+    // приложении, бесполезен — глоссарием пользуются в кабине.
+    variants: (term.variants ?? [])
+      .map((variant) => variant.text?.trim() ?? "")
+      .filter(Boolean),
   }));
 
   const labels: GlossaryLabels = {

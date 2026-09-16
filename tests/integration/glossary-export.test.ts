@@ -117,7 +117,9 @@ describe("CSV", () => {
       LABELS,
     );
     const lines = csv.replace(/^﻿/, "").trimEnd().split("\r\n");
-    expect(lines[0]).toBe('"English","Русский","Примечание","Происхождение"');
+    // Пятая колонка добавлена 17.09 вместе с запасными эквивалентами.
+    // CSV — архивный формат, и место в нём дешевле, чем свёрнутое примечание.
+    expect(lines[0]).toBe('"English","Русский","Примечание","Происхождение","Варианты"');
     expect(lines[1]).toContain('"предложен моделью"');
     expect(lines[2]).toContain('"из практики"');
   });
@@ -126,5 +128,80 @@ describe("CSV", () => {
     const csv = glossaryToCsv([row({ source: 'так называемый "выпуск"' })], LABELS);
     expect(csv).toContain('"так называемый ""выпуск"""');
     expect(csv.trimEnd().split("\r\n")).toHaveLength(2);
+  });
+});
+
+/**
+ * Запасные эквиваленты в выгрузке.
+ *
+ * Вариант, оставшийся в приложении, бесполезен: глоссарием пользуются
+ * в кабине, а туда едет файл.
+ *
+ * Форматы расходятся намеренно. В файле для InterpretBank колонок ровно три,
+ * и примечание — единственная, которую он покажет рядом с термином: туда
+ * складывается всё. CSV идёт в архив и человеку, колонок в нём не жалко,
+ * и варианты стоят отдельно.
+ */
+describe("варианты в файле", () => {
+  const labels = { source: "English", target: "Русский" };
+
+  it("в файле для InterpretBank стоят первыми в примечании", async () => {
+    // Порядок не косметика: в кабине читают по диагонали и не дочитывают.
+    // Второй эквивалент должен попасться раньше оговорки о контексте.
+    const sheet = await readSheet(
+      await glossaryToXlsx(
+        [
+          {
+            source: "civic space",
+            target: "гражданское пространство",
+            note: "в отчётах ООН",
+            status: "verified",
+            variants: ["пространство гражданского общества"],
+          },
+        ],
+        labels,
+      ),
+    );
+    expect(sheet.flat().join("\n")).toContain("ещё: пространство гражданского общества · в отчётах ООН");
+  });
+
+  it("несколько вариантов разделены косой чертой", async () => {
+    const sheet = await readSheet(
+      await glossaryToXlsx(
+        [{ source: "a", target: "б", note: null, status: "verified", variants: ["в", "г"] }],
+        labels,
+      ),
+    );
+    expect(sheet.flat().join("\n")).toContain("ещё: в / г");
+  });
+
+  it("пометка «не подтверждён» остаётся последней", async () => {
+    const sheet = await readSheet(
+      await glossaryToXlsx(
+        [{ source: "a", target: "б", note: "контекст", status: "suggested", variants: ["в"] }],
+        labels,
+      ),
+    );
+    expect(sheet.flat().join("\n")).toContain("ещё: в · контекст · не подтверждён");
+  });
+
+  it("без вариантов примечание выглядит как раньше", async () => {
+    // Старые термины не должны обрасти пустыми приставками.
+    const sheet = await readSheet(
+      await glossaryToXlsx([{ source: "a", target: "б", note: "контекст", status: "suggested" }], labels),
+    );
+    expect(sheet.flat().join("\n")).toContain("контекст · не подтверждён");
+    expect(sheet.flat().join("\n")).not.toContain("ещё:");
+  });
+
+  it("в CSV у вариантов своя колонка", async () => {
+    const csv = glossaryToCsv(
+      [{ source: "a", target: "б", note: "контекст", status: "suggested", variants: ["в", "г"] }],
+      labels,
+    );
+    expect(csv).toContain('"Варианты"');
+    expect(csv).toContain('"в / г"');
+    // Примечание при этом не раздувается: колонка «Происхождение» и так есть.
+    expect(csv).toContain('"контекст"');
   });
 });

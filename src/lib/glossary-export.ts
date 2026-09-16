@@ -21,6 +21,8 @@ export interface GlossaryRow {
   target: string | null;
   note: string | null;
   status: "suggested" | "verified" | "from-practice";
+  /** Запасные эквиваленты. В кабине они важнее примечания */
+  variants?: string[];
 }
 
 export interface GlossaryLabels {
@@ -37,10 +39,25 @@ export interface GlossaryLabels {
  */
 const UNVERIFIED = "не подтверждён";
 
+/**
+ * Всё, что должно оказаться в единственной колонке примечаний.
+ *
+ * Варианты идут ПЕРВЫМИ, раньше примечания и пометки. В кабине читают по
+ * диагонали и не дочитывают: если у термина есть второй эквивалент, увидеть
+ * его надо в первую секунду, а не после оговорки о том, где он уместен.
+ */
 const infoFor = (row: GlossaryRow): string => {
-  const note = row.note?.trim() ?? "";
-  if (row.status !== "suggested") return note;
-  return note ? `${note} · ${UNVERIFIED}` : UNVERIFIED;
+  const parts: string[] = [];
+
+  const variants = (row.variants ?? []).map((v) => v.trim()).filter(Boolean);
+  if (variants.length) parts.push(`ещё: ${variants.join(" / ")}`);
+
+  const note = row.note?.trim();
+  if (note) parts.push(note);
+
+  if (row.status === "suggested") parts.push(UNVERIFIED);
+
+  return parts.join(" · ");
 };
 
 // ───────────────────────────── CSV ─────────────────────────────
@@ -61,9 +78,20 @@ const STATUS_CSV: Record<GlossaryRow["status"], string> = {
  * превращается в кракозябры — а глоссарий у нас как раз русский.
  */
 export function glossaryToCsv(rows: GlossaryRow[], labels: GlossaryLabels): string {
-  const header = [labels.source, labels.target, "Примечание", "Происхождение"];
+  // Колонок здесь не три, а пять: CSV для архива и для человека, и запасные
+  // эквиваленты в нём стоят отдельно, а не свёрнуты в примечание. Сворачивать
+  // приходится только в файле для InterpretBank — там колонок ровно три.
+  const header = [labels.source, labels.target, "Примечание", "Происхождение", "Варианты"];
   const body = rows.map((row) =>
-    [row.source, row.target ?? "", row.note ?? "", STATUS_CSV[row.status]].map(csvCell).join(","),
+    [
+      row.source,
+      row.target ?? "",
+      row.note ?? "",
+      STATUS_CSV[row.status],
+      (row.variants ?? []).join(" / "),
+    ]
+      .map(csvCell)
+      .join(","),
   );
   return "﻿" + [header.map(csvCell).join(","), ...body].join("\r\n") + "\r\n";
 }

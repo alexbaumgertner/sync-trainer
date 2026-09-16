@@ -536,6 +536,32 @@ export const GlossaryTerms: CollectionConfig = {
     { name: "verifiedBy", type: "relationship", relationTo: "users" },
     { name: "verifiedAt", type: "date" },
     {
+      /**
+       * Запасные эквиваленты к тому же термину.
+       *
+       * У термина редко один правильный перевод: в суде одно, в ЕС другое,
+       * а у заказчика своя привычка. Раньше выбор был разрушающим — новый
+       * перевод затирал прежний, и вспомнить, что там было, было негде.
+       *
+       * `proposedBy` пустой означает «предложила модель». Это отдельный
+       * случай, а не отсутствие данных: в кабине вариант от человека и
+       * вариант от модели весят по-разному, и различать их надо на виду.
+       *
+       * Поле-связь, а не имя строкой, намеренно: когда глоссарий откроется
+       * коллегам (R4), появятся чужие имена — и это должно стать изменением
+       * прав, а не переносом данных.
+       */
+      name: "variants",
+      type: "array",
+      admin: { description: "Запасные эквиваленты: кто предложил и почему" },
+      fields: [
+        { name: "text", type: "text", required: true },
+        { name: "proposedBy", type: "relationship", relationTo: "users" },
+        { name: "note", type: "text" },
+        { name: "at", type: "date" },
+      ],
+    },
+    {
       name: "occurredAtEvent",
       type: "checkbox",
       defaultValue: false,

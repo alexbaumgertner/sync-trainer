@@ -21,6 +21,7 @@ import * as migration_20260915_zz_locked_engagements from './20260915_zz_locked_
 import * as migration_20260916_activity from './20260916_activity';
 import * as migration_20260916_nullable_actors from './20260916_nullable_actors';
 import * as migration_20260916_zz_ratings from './20260916_zz_ratings';
+import * as migration_20260917_glossary_variants from './20260917_glossary_variants';
 
 export const migrations = [
   {
@@ -92,5 +93,10 @@ export const migrations = [
     up: migration_20260916_zz_ratings.up,
     down: migration_20260916_zz_ratings.down,
     name: '20260916_zz_ratings',
+  },
+  {
+    up: migration_20260917_glossary_variants.up,
+    down: migration_20260917_glossary_variants.down,
+    name: '20260917_glossary_variants',
   },
 ];

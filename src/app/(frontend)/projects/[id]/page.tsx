@@ -146,6 +146,12 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           <>
             <p className="text-sm text-neutral-500">{glossaryCount} терминов.</p>
             <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Link
+                href={`/projects/${project.id}/glossary`}
+                className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+              >
+                Открыть и править
+              </Link>
               <a
                 href={`/api/projects/${project.id}/glossary?format=xlsx`}
                 className="rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
@@ -163,7 +169,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               При импорте в InterpretBank отметьте <b>Exclude first row</b> — в первой строке
               названия языков, по ним он определяет колонки. Термины, предложенные моделью и
               никем не проверенные, помечены в колонке примечаний: в кабине они выглядят так же
-              уверенно, как выверенные, а верить им нельзя.
+              уверенно, как выверенные, а верить им нельзя. Запасные эквиваленты едут туда же,
+              первыми — читают в кабине по диагонали.
             </p>
           </>
         )}
