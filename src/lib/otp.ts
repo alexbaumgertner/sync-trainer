@@ -19,6 +19,29 @@ const PER_EMAIL_LIMIT = 3;
 const PER_IP_WINDOW_MS = 60 * 60 * 1000;
 const PER_IP_LIMIT = 20;
 
+/**
+ * Самое длинное окно ограничителя. По нему считается срок хранения: удалить
+ * запись, которая ещё попадает в окно, — значит подарить обратившемуся
+ * свежий лимит. Вынесено отдельно, чтобы связь была видна и в коде,
+ * и в тесте, а не держалась на том, что кто-то помнит про час.
+ */
+const LONGEST_WINDOW_MS = Math.max(PER_EMAIL_WINDOW_MS, PER_IP_WINDOW_MS);
+
+/**
+ * Сколько держим коды.
+ *
+ * Запись создаётся на КАЖДУЮ попытку входа, включая попытки с незнакомых
+ * адресов: она же служит счётчиком частоты, и отличить по базе приглашённого
+ * от постороннего нельзя — хранится хеш. Значит таблица растёт от чужого
+ * интереса, а не от нашего использования, и на бесплатном Neon это полгига,
+ * которые однажды кончатся. Она же замедляет сам ограничитель: он делает
+ * по два `count` на каждый запрос.
+ *
+ * Сутки, а не час с небольшим: запас нужен, чтобы по свежей жалобе «код не
+ * пришёл» было на что посмотреть.
+ */
+export const CODE_RETENTION_MS = 24 * 60 * 60 * 1000;
+
 /** A4: ответ не должен выдавать, знаком ли адрес, ни текстом, ни временем. */
 const MIN_RESPONSE_MS = 400;
 
@@ -140,6 +163,35 @@ export async function acceptPendingInvitation(
   });
 
   return user.id;
+}
+
+/**
+ * Убрать старые коды. Зовётся из суточного крона.
+ *
+ * Отдельным кроном не делаю: на Hobby их число ограничено, а уборка
+ * прекрасно живёт рядом с резервной копией — заодно копия не тащит
+ * с собой сутки мусора.
+ */
+export async function purgeStaleCodes(now = Date.now()): Promise<number> {
+  if (CODE_RETENTION_MS <= LONGEST_WINDOW_MS) {
+    // Не предупреждение в комментарии, а отказ: подрезанный срок хранения
+    // молча выключает ограничитель частоты, и заметить это будет нечем.
+    throw new Error(
+      `Срок хранения кодов (${CODE_RETENTION_MS} мс) не больше окна ограничителя ` +
+        `(${LONGEST_WINDOW_MS} мс): удаление вернуло бы обратившемуся свежий лимит.`,
+    );
+  }
+
+  const payload = await payloadClient();
+  const cutoff = new Date(now - CODE_RETENTION_MS).toISOString();
+
+  const removed = await payload.delete({
+    collection: "otp-codes",
+    where: { createdAt: { less_than: cutoff } },
+    overrideAccess: true,
+  });
+
+  return removed.docs?.length ?? 0;
 }
 
 export type RequestResult = { ok: true } | { ok: false; error: string };

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { CRON_FORBIDDEN, cronAuthorized } from "@/lib/cron-auth";
 import { list, put, del } from "@vercel/blob";
 import { createDump, summarize, encryptDump, backupKey } from "@/lib/backup";
+import { purgeStaleCodes } from "@/lib/otp";
 import { sendEmail, emailConfigured } from "@/lib/email";
 
 export const runtime = "nodejs";
@@ -27,6 +28,15 @@ const PREFIX = "backups/";
 export async function GET(request: Request): Promise<Response> {
   if (!cronAuthorized(request)) {
     return NextResponse.json({ error: CRON_FORBIDDEN }, { status: 401 });
+  }
+
+  // Уборка до снятия копии: иначе копия тащит с собой сутки мусора.
+  // Ошибка здесь не повод не делать копию — копия важнее уборки.
+  let purged = 0;
+  try {
+    purged = await purgeStaleCodes();
+  } catch (error) {
+    console.error("[backup] старые коды не убраны", error);
   }
 
   try {
@@ -55,6 +65,7 @@ export async function GET(request: Request): Promise<Response> {
     return NextResponse.json({
       ok: true,
       rows: dump.tables.reduce((sum, t) => sum + t.rows.length, 0),
+      purgedCodes: purged,
       bytes: body.byteLength,
       encrypted: Boolean(key),
       stored,
