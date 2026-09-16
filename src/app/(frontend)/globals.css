@@ -19,6 +19,24 @@
   }
 }
 
+/*
+  Цвета формы волны в проигрывателе. Живут здесь, а не в компоненте,
+  потому что канва о теме ничего не знает: она читает готовые значения
+  через `getComputedStyle`, и менять их должна та же таблица стилей,
+  что и всё остальное.
+*/
+:root {
+  --wave-played: #171717;
+  --wave-rest: #d4d4d4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --wave-played: #ededed;
+    --wave-rest: #404040;
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

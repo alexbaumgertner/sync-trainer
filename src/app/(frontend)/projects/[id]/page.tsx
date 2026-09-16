@@ -1,4 +1,5 @@
 import ArtifactRating from "@/components/artifact-rating";
+import AudioPlayer from "@/components/audio-player";
 import { saveRating } from "./rate-actions";
 import { RATING_TARGETS, ratingFor, type RatingTarget } from "@/lib/ratings";
 import Link from "next/link";
@@ -106,6 +107,15 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                 >
                   Скачать
                 </a>
+                {file.kind === "audio" && (
+                  <div className="mt-2 w-full">
+                    <AudioPlayer
+                      src={`/api/projects/${project.id}/files/${file.id}`}
+                      peaksUrl={`/api/projects/${project.id}/files/${file.id}/peaks`}
+                      title={project.title}
+                    />
+                  </div>
+                )}
                 {RATING_TARGETS.includes(file.kind as RatingTarget) && (
                   <div className="mt-1 w-full">
                     <ArtifactRating

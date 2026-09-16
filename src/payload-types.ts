@@ -329,6 +329,19 @@ export interface Artifact {
   kind: 'script' | 'ssml' | 'audio' | 'glossary';
   blobPath: string;
   bytes?: number | null;
+  /**
+   * Столбики формы волны, 0–100
+   */
+  peaks?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  durationSec?: number | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -778,6 +791,8 @@ export interface ArtifactsSelect<T extends boolean = true> {
   kind?: T;
   blobPath?: T;
   bytes?: T;
+  peaks?: T;
+  durationSec?: T;
   updatedAt?: T;
   createdAt?: T;
 }
