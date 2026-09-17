@@ -134,6 +134,53 @@ test("дорожка доступна с клавиатуры", async ({ page, c
   await expect(track).toHaveAttribute("aria-valuenow", "0");
 });
 
+test("перемотка действительно двигает звук", async ({ page, context }) => {
+  // Найдено живым использованием: ползунок двигался, время менялось,
+  // а звук шёл с прежнего места — маршрут не поддерживал `Range`.
+  // Поэтому проверяем не подпись под ползунком, а `currentTime` у самого
+  // элемента, и не сразу, а после того как браузер подтвердит перемотку.
+  await signIn(context);
+  await page.goto(`/projects/${projectId}`);
+
+  await page.getByRole("slider").waitFor();
+  await page.waitForFunction(() => {
+    const audio = document.querySelector("audio");
+    return !!audio && Number.isFinite(audio.duration) && audio.duration > 1;
+  });
+
+  const seeked = await page.evaluate(async () => {
+    const audio = document.querySelector("audio")!;
+    const target = audio.duration * 0.75;
+    await new Promise<void>((resolve) => {
+      audio.addEventListener("seeked", () => resolve(), { once: true });
+      audio.currentTime = target;
+      setTimeout(resolve, 4000);
+    });
+    return { at: audio.currentTime, target };
+  });
+
+  expect(Math.abs(seeked.at - seeked.target)).toBeLessThan(1);
+});
+
+test("щелчок по дорожке перематывает", async ({ page, context }) => {
+  await signIn(context);
+  await page.goto(`/projects/${projectId}`);
+
+  const track = page.getByRole("slider");
+  await track.waitFor();
+  await page.waitForFunction(() => {
+    const audio = document.querySelector("audio");
+    return !!audio && Number.isFinite(audio.duration) && audio.duration > 1;
+  });
+
+  const box = (await track.boundingBox())!;
+  await page.mouse.click(box.x + box.width * 0.75, box.y + box.height / 2);
+
+  await expect
+    .poll(async () => page.evaluate(() => document.querySelector("audio")?.currentTime ?? 0))
+    .toBeGreaterThan(6);
+});
+
 test("скорость переключается", async ({ page, context }) => {
   await signIn(context);
   await page.goto(`/projects/${projectId}`);

@@ -3,6 +3,7 @@ import { currentUser } from "@/lib/auth";
 import { payloadClient } from "@/lib/payload";
 import { readArtifact } from "@/lib/artifacts";
 import { insideProject } from "@/lib/artifact-path";
+import { contentRange, parseRange } from "@/lib/http-range";
 
 export const runtime = "nodejs";
 
@@ -21,7 +22,7 @@ const EXTENSIONS: Record<string, string> = {
 };
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string; fileId: string }> },
 ) {
   const user = await currentUser();
@@ -63,12 +64,39 @@ export async function GET(
   const body = await readArtifact(artifact.blobPath);
   if (!body) return NextResponse.json({ error: "Файл не найден." }, { status: 404 });
 
+  const headers: Record<string, string> = {
+    "Content-Type": CONTENT_TYPES[artifact.kind] ?? "application/octet-stream",
+    "Content-Disposition": `attachment; filename="project-${id}-${artifact.kind}.${EXTENSIONS[artifact.kind] ?? "bin"}"`,
+    // Материалы заказчика на диск браузера не кладём. Перемотке это
+    // не мешает: браузер просит нужный кусок заново, а куски маленькие.
+    "Cache-Control": "private, no-store",
+    // Без этого заголовка браузер считает, что перематывать нельзя,
+    // и молча этого не делает.
+    "Accept-Ranges": "bytes",
+  };
+
+  const range = parseRange(request.headers.get("range"), body.byteLength);
+
+  if (range.kind === "unsatisfiable") {
+    return new Response(null, {
+      status: 416,
+      headers: { ...headers, "Content-Range": `bytes */${body.byteLength}` },
+    });
+  }
+
+  if (range.kind === "partial") {
+    const chunk = body.subarray(range.start, range.end + 1);
+    return new Response(new Uint8Array(chunk), {
+      status: 206,
+      headers: {
+        ...headers,
+        "Content-Length": String(chunk.byteLength),
+        "Content-Range": contentRange(range.start, range.end, body.byteLength),
+      },
+    });
+  }
+
   return new Response(new Uint8Array(body), {
-    headers: {
-      "Content-Type": CONTENT_TYPES[artifact.kind] ?? "application/octet-stream",
-      "Content-Length": String(body.byteLength),
-      "Content-Disposition": `attachment; filename="project-${id}-${artifact.kind}.${EXTENSIONS[artifact.kind] ?? "bin"}"`,
-      "Cache-Control": "private, no-store",
-    },
+    headers: { ...headers, "Content-Length": String(body.byteLength) },
   });
 }
