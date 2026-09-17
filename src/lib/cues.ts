@@ -134,6 +134,26 @@ export function splitSentences(text: string, limit = MAX_CUE_CHARS): string[] {
   return out.flatMap((sentence) => splitLong(sentence, limit));
 }
 
+/**
+ * Убрать подпись говорящего из начала реплики.
+ *
+ * В скрипте реплика начинается с «Moderator: …», и озвучка это произносит —
+ * значит текст обязан совпадать со звуком. Но показывать подпись дважды
+ * (заголовком над репликой и в первой же фразе) незачем: читать так тяжелее,
+ * а цель всей затеи ровно обратная.
+ *
+ * Убираем ТОЛЬКО точное совпадение с известным говорящим. «Elena Vance:»
+ * внутри реплики — часть речи, её трогать нельзя: её произносят, и без неё
+ * человек не поймёт, кого назвали.
+ */
+const dropSpeakerPrefix = (text: string, speaker: string | null): string => {
+  if (!speaker) return text;
+  const prefix = `${speaker.trim()}:`;
+  return text.trimStart().toLowerCase().startsWith(prefix.toLowerCase())
+    ? text.trimStart().slice(prefix.length).trimStart()
+    : text;
+};
+
 /** Сколько «говорения» в строке. Пробелы не произносятся. */
 const weightOf = (text: string): number => text.replace(/\s+/g, "").length || 1;
 
@@ -155,7 +175,7 @@ export function buildCues(items: TimedItem[]): Cue[] {
       continue;
     }
 
-    const sentences = splitSentences(item.text);
+    const sentences = splitSentences(dropSpeakerPrefix(item.text, item.speaker));
     if (!sentences.length) {
       clock += item.seconds;
       continue;

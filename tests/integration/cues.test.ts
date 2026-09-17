@@ -110,6 +110,34 @@ describe("дробление длинных предложений", () => {
   });
 });
 
+describe("подпись говорящего", () => {
+  it("не повторяется в первой фразе", () => {
+    // Озвучка произносит «Moderator:», и текст обязан совпадать со звуком.
+    // Но показывать подпись дважды — заголовком и в тексте — значит
+    // затруднить чтение ровно там, где мы его облегчаем.
+    const cues = buildCues([
+      { kind: "speech", text: "Moderator: Добрый день. Начнём.", speaker: "Moderator", seconds: 6 },
+    ]);
+    expect(cues[0].text).toBe("Добрый день.");
+    expect(cues[0].speaker).toBe("Moderator");
+  });
+
+  it("имя внутри речи не трогается", () => {
+    // «Elena Vance:» произносят, и без него непонятно, кого назвали.
+    const cues = buildCues([
+      { kind: "speech", text: "Moderator: Elena Vance: слово вам.", speaker: "Moderator", seconds: 6 },
+    ]);
+    expect(cues[0].text).toBe("Elena Vance: слово вам.");
+  });
+
+  it("чужая подпись остаётся на месте", () => {
+    const cues = buildCues([
+      { kind: "speech", text: "Speaker B: возражаю.", speaker: "Moderator", seconds: 4 },
+    ]);
+    expect(cues[0].text).toBe("Speaker B: возражаю.");
+  });
+});
+
 describe("раскладка по времени", () => {
   const items: TimedItem[] = [
     { kind: "speech", text: "Раз. Два.", speaker: "Moderator", seconds: 10 },
