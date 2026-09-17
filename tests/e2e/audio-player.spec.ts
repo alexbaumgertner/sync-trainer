@@ -78,9 +78,28 @@ test.beforeAll(async () => {
   })();
   const blobPath = artifactPath(projectId, "audio.mp3");
   await putArtifact(blobPath, mp3, "audio/mpeg");
+  // Карта времени, какую снимает синтез: три фразы по четыре секунды.
+  // Кладём готовой, чтобы тест проверял навигацию, а не синтез.
+  const cuesVtt = [
+    "WEBVTT",
+    "",
+    "1",
+    "00:00:00.000 --> 00:00:04.000",
+    "<v Moderator>Первая фраза про открытие заседания.</v>",
+    "",
+    "2",
+    "00:00:04.000 --> 00:00:08.000",
+    "<v Moderator>Вторая фраза, уже про повестку дня.</v>",
+    "",
+    "3",
+    "00:00:08.000 --> 00:00:12.000",
+    "<v Speaker A>Третья фраза — отвечает другой человек.</v>",
+    "",
+  ].join("\n");
+
   await payload.create({
     collection: "artifacts",
-    data: { project: projectId, kind: "audio", blobPath, bytes: mp3.length },
+    data: { project: projectId, kind: "audio", blobPath, bytes: mp3.length, cuesVtt, durationSec: 12 },
     overrideAccess: true,
   });
 });
@@ -196,4 +215,53 @@ test("как это выглядит", async ({ page, context }) => {
   await page.getByRole("slider").waitFor();
   await page.waitForTimeout(1500);
   await page.locator("section", { hasText: "Файлы проекта" }).screenshot({ path: "test-results/player.png" });
+});
+
+test.describe("текст под звуком", () => {
+  test("фразы показаны с говорящими", async ({ page, context }) => {
+    await signIn(context);
+    await page.goto(`/projects/${projectId}`);
+
+    // Браузер разбирает VTT сам — если разметка невалидна, не будет ни одной.
+    await expect(page.getByRole("button", { name: /Первая фраза/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Третья фраза/ })).toBeVisible();
+
+    // Говорящий вынут из голосовой разметки и показан отдельно,
+    // а не остался в тексте фразы.
+    await expect(page.getByText("Moderator", { exact: true })).toBeVisible();
+    await expect(page.getByText("Speaker A", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /<v / })).toHaveCount(0);
+  });
+
+  test("щелчок по фразе слушает с неё — главная цель", async ({ page, context }) => {
+    await signIn(context);
+    await page.goto(`/projects/${projectId}`);
+
+    await page.getByRole("button", { name: /Третья фраза/ }).click();
+
+    await expect
+      .poll(async () => page.evaluate(() => document.querySelector("audio")?.currentTime ?? 0))
+      .toBeGreaterThan(7.5);
+
+    const playing = await page.evaluate(() => {
+      const audio = document.querySelector("audio");
+      return audio ? !audio.paused : false;
+    });
+    expect(playing).toBe(true);
+  });
+
+  test("подсветка идёт за звуком", async ({ page, context }) => {
+    await signIn(context);
+    await page.goto(`/projects/${projectId}`);
+
+    await page.getByRole("button", { name: /Вторая фраза/ }).click();
+
+    // `aria-current` ставится по событию `cuechange` от браузера,
+    // а не нашим таймером: расходиться со звуком нечему.
+    await expect(page.getByRole("button", { name: /Вторая фраза/ })).toHaveAttribute(
+      "aria-current",
+      "true",
+      { timeout: 10_000 },
+    );
+  });
 });

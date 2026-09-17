@@ -342,6 +342,10 @@ export interface Artifact {
     | boolean
     | null;
   durationSec?: number | null;
+  /**
+   * Карта времени в формате WebVTT
+   */
+  cuesVtt?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -793,6 +797,7 @@ export interface ArtifactsSelect<T extends boolean = true> {
   bytes?: T;
   peaks?: T;
   durationSec?: T;
+  cuesVtt?: T;
   updatedAt?: T;
   createdAt?: T;
 }

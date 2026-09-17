@@ -24,7 +24,9 @@ vi.mock("@/lib/google-tts", async (importOriginal) => {
         release = resolve;
       });
       if (failSynthesis) throw new Error("Google отказал");
-      return Buffer.from([0xff, 0xf3, 0x48, 0xc4]);
+      // Форма ответа: файл плюс длительность каждого куска — из них
+      // собирается карта времени для подсветки текста.
+      return { audio: Buffer.from([0xff, 0xf3, 0x48, 0xc4]), itemSeconds: [1] };
     },
   };
 });

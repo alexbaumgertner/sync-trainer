@@ -112,6 +112,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                     <AudioPlayer
                       src={`/api/projects/${project.id}/files/${file.id}`}
                       peaksUrl={`/api/projects/${project.id}/files/${file.id}/peaks`}
+                      cuesUrl={`/api/projects/${project.id}/files/${file.id}/cues`}
                       title={project.title}
                     />
                   </div>

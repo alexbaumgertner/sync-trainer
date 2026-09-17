@@ -6,6 +6,7 @@ import { TextToSpeechClient } from "@google-cloud/text-to-speech";
 import type { PlanItem } from "./ssml";
 import { languageOf } from "./voices";
 import { silenceMp3 } from "./silence";
+import { mp3Duration } from "./mp3-frames";
 
 let cached: TextToSpeechClient | null = null;
 
@@ -132,11 +133,25 @@ async function synthesizeOne(
  * Выполняет план: речевые куски уходят в Google (до `concurrency` параллельно),
  * паузы генерируются локально. Результат склеивается строго по порядку плана.
  */
+/**
+ * Результат склейки: сам файл и длительность КАЖДОГО куска.
+ *
+ * Длительности нужны для карты времени — по ней текст раскладывается
+ * по звуку. Взять их потом негде: после склейки куски неразличимы, а
+ * повторно расшифровывать четырнадцать кусков ради того, что известно
+ * здесь, — работа впустую.
+ */
+export interface SynthesisResult {
+  audio: Buffer;
+  /** По элементу плана, в том же порядке. Паузы тоже */
+  itemSeconds: number[];
+}
+
 export async function synthesizePlan(
   plan: PlanItem[],
   settings: SynthesisSettings,
   concurrency = 4,
-): Promise<Buffer> {
+): Promise<SynthesisResult> {
   const sampleRate = settings.sampleRateHertz ?? 24000;
   const results = new Array<Buffer>(plan.length);
 
@@ -147,7 +162,14 @@ export async function synthesizePlan(
     else speechIndexes.push(i);
   });
 
-  if (!speechIndexes.length) return Buffer.concat(results);
+  const measure = (): SynthesisResult => ({
+    audio: Buffer.concat(results),
+    // По кадрам, а не по байтам и битрейту: у MPEG-2 своя таблица,
+    // и на этом уже ошибались вдвое.
+    itemSeconds: results.map((part) => (part ? mp3Duration(part) : 0)),
+  });
+
+  if (!speechIndexes.length) return measure();
 
   // Инициализируем клиент ДО пула: иначе несколько параллельных вызовов
   // одновременно триггерят ленивую auth-инициализацию google-gax, и её
@@ -167,7 +189,7 @@ export async function synthesizePlan(
   await Promise.all(
     Array.from({ length: Math.min(concurrency, speechIndexes.length) }, worker),
   );
-  return Buffer.concat(results);
+  return measure();
 }
 
 /** Человекочитаемое объяснение типовых ошибок Google. */

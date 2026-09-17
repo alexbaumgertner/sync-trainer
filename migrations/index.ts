@@ -23,6 +23,7 @@ import * as migration_20260916_nullable_actors from './20260916_nullable_actors'
 import * as migration_20260916_zz_ratings from './20260916_zz_ratings';
 import * as migration_20260917_glossary_variants from './20260917_glossary_variants';
 import * as migration_20260917_zz_waveform from './20260917_zz_waveform';
+import * as migration_20260917_zzz_cues from './20260917_zzz_cues';
 
 export const migrations = [
   {
@@ -104,5 +105,10 @@ export const migrations = [
     up: migration_20260917_zz_waveform.up,
     down: migration_20260917_zz_waveform.down,
     name: '20260917_zz_waveform',
+  },
+  {
+    up: migration_20260917_zzz_cues.up,
+    down: migration_20260917_zzz_cues.down,
+    name: '20260917_zzz_cues',
   },
 ];

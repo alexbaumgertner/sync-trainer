@@ -24,7 +24,7 @@ vi.mock("@/lib/google-tts", async (importOriginal) => {
         speakingRate: settings.speakingRate,
         format: plan.find((i) => i.type === "speech")?.format,
       });
-      return Buffer.alloc(64);
+      return { audio: Buffer.alloc(64), itemSeconds: plan.map(() => 1) };
     },
   };
 });

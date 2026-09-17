@@ -4,6 +4,8 @@ import type { PlanItem } from "@/lib/ssml";
 import { synthesizePlan, explainError } from "@/lib/google-tts";
 import { artifactPath, putArtifact } from "@/lib/artifacts";
 import { recordStep } from "@/lib/activity";
+import { buildCues, toVtt } from "@/lib/cues";
+import { ssmlToSpoken } from "@/lib/ssml";
 import { withId3, SYNTHETIC_NOTICE } from "@/lib/id3";
 import { recordUsage } from "@/lib/usage";
 import { tierOf, TIER_LABEL } from "@/lib/voices";
@@ -40,11 +42,36 @@ export async function runAudioJob(job: AudioJob): Promise<void> {
   const { payload, generationId, projectId } = job;
 
   try {
-    const audio = await synthesizePlan(job.plan, {
+    const { audio, itemSeconds } = await synthesizePlan(job.plan, {
       defaultVoice: job.defaultVoice,
       speakerVoices: job.speakerVoices,
       speakingRate: job.speakingRate,
     });
+
+    /**
+     * Карта времени: текст, разложенный по звуку.
+     *
+     * Снимается только здесь и только сейчас. После склейки куски
+     * неразличимы, и восстановить границы реплик потом можно лишь
+     * приблизительно — по длине текста. Поэтому точная карта существует
+     * у озвучек, сделанных начиная с этой правки.
+     */
+    const cuesVtt = toVtt(
+      buildCues(
+        job.plan.map((item, index) =>
+          item.type === "silence"
+            ? { kind: "silence" as const, seconds: itemSeconds[index] ?? item.seconds }
+            : {
+                kind: "speech" as const,
+                // Тот же текст, что ушёл в синтез: если подставить другой,
+                // подсветка разойдётся со звуком на первой же реплике.
+                text: item.format === "ssml" ? ssmlToSpoken(item.content) : item.content,
+                speaker: item.speaker,
+                seconds: itemSeconds[index] ?? 0,
+              },
+        ),
+      ),
+    );
 
     // G5: пометка о синтетичности живёт и в самом файле, а не только на экране.
     const tagged = withId3(audio, { title: job.projectTitle, comment: SYNTHETIC_NOTICE });
@@ -66,7 +93,16 @@ export async function runAudioJob(job: AudioJob): Promise<void> {
 
     await payload.create({
       collection: "artifacts",
-      data: { project: projectId, generation: generationId, kind: "audio", blobPath, bytes },
+      data: {
+        project: projectId,
+        generation: generationId,
+        kind: "audio",
+        blobPath,
+        bytes,
+        // Карта времени ложится вместе с файлом: снять её потом негде.
+        cuesVtt,
+        durationSec: itemSeconds.reduce((sum, seconds) => sum + seconds, 0),
+      },
       overrideAccess: true,
     });
 

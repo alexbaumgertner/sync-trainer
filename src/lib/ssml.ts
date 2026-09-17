@@ -259,6 +259,30 @@ const unescapeXml = (s: string): string =>
     .replace(/&amp;/g, "&");
 
 /** Абзац → чистый текст: теги долой, сущности обратно, метка спикера по флагу. */
+/**
+ * Произносимый текст из SSML-документа.
+ *
+ * Нужен карте времени: в SSML-режиме в синтез уходит разметка, а подсвечивать
+ * надо то, что человек слышит. Снимаем теги и разворачиваем сущности —
+ * ничего умнее не требуется, потому что разметку писали мы сами и она
+ * состоит из `<speak>`, `<p>`, `<s>`, `<break>` и `<prosody>`.
+ *
+ * `<break>` превращается в пробел, а не исчезает: иначе слова по краям
+ * паузы склеились бы в одно.
+ */
+export function ssmlToSpoken(ssml: string): string {
+  return ssml
+    .replace(/<break[^>]*\/?>/g, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function toPlainText(block: Extract<Block, { kind: "p" }>, stripLabels: boolean): string {
   let body = block.body.trim();
   if (stripLabels && block.speaker) body = body.replace(SPEAKER_RE, "");
