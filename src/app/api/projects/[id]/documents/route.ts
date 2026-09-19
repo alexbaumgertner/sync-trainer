@@ -1,22 +1,22 @@
 import { NextResponse } from "next/server";
 import { del, get } from "@vercel/blob";
-import { debriefNotesFor } from "@/lib/debrief-notes";
 import { currentUser } from "@/lib/auth";
 import { payloadClient } from "@/lib/payload";
 import { recordStep } from "@/lib/activity";
 import { extractDocument, kindOf, MAX_UPLOAD_BYTES } from "@/lib/extract";
-import { presetById } from "@/presets";
-import { generateScript, glossaryToCsv, scriptToMarkdown } from "@/lib/script-generation";
-import { geminiConfigured, explainGeminiError, NO_GEMINI_KEY } from "@/lib/gemini";
 import { artifactPath, putArtifact } from "@/lib/artifacts";
-import { budgetBlock, readUsage, recordUsage } from "@/lib/usage";
-import type { Trap } from "@/lib/prompt";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 /**
- * Обработка загруженного документа.
+ * Загрузка материалов события.
+ *
+ * Только загрузка. Раньше этот же запрос сразу генерировал скрипт — и в этом
+ * была поломка всего порядка работы: скрипт рождался вместе с документом, а
+ * глоссарий приезжал к нему прицепом, поэтому выверка терминов руками ни на
+ * что не влияла. Теперь загрузка кончается загрузкой, а дальше человек сам
+ * решает: сначала собрать глоссарий (N1), потом по нему — скрипт (N3).
  *
  * Требования S1–S6, I4. Оригинал остаётся в хранилище: F1 из R1 отменён.
  * Извлечённый текст по-прежнему никуда не пишется (F2) — в базу попадают
@@ -54,7 +54,6 @@ export async function POST(
   let filename: string;
   let mime: string;
   let blobPath: string | null = null;
-  let rawParams: Record<string, unknown> = {};
   let force = false;
 
   const contentType = request.headers.get("content-type") ?? "";
@@ -65,9 +64,7 @@ export async function POST(
         pathname?: string;
         filename?: string;
         force?: boolean;
-        params?: Record<string, unknown>;
       };
-      rawParams = body.params ?? {};
       force = Boolean(body.force);
       if (!body.pathname) {
         return NextResponse.json({ error: "Не передан путь загруженного файла." }, { status: 400 });
@@ -105,13 +102,6 @@ export async function POST(
       filename = safeFilename(file.name) ?? "document";
       mime = file.type;
       force = form.get("force") === "1";
-      rawParams = {
-        durationMin: form.get("durationMin"),
-        speakers: form.get("speakers"),
-        termDensity: form.get("termDensity"),
-        rate: form.get("rate"),
-        traps: form.getAll("traps"),
-      };
     }
   } catch (error) {
     return NextResponse.json(
@@ -150,37 +140,6 @@ export async function POST(
       { error: "Поддерживаются PDF, DOCX и PPTX." },
       { status: 415 },
     );
-  }
-
-  let genParams: {
-    durationMin: number;
-    speakers: number;
-    termDensity: number;
-    traps: Trap[];
-    rate: string;
-  };
-  try {
-    genParams = {
-      durationMin: clamp(Number(rawParams.durationMin), 5, 30, 20),
-      speakers: clamp(Number(rawParams.speakers), 2, 6, 5),
-      termDensity: clamp(Number(rawParams.termDensity), 20, 60, 40),
-      traps: Array.isArray(rawParams.traps) ? (rawParams.traps as Trap[]) : [],
-      rate: typeof rawParams.rate === "string" && rawParams.rate ? rawParams.rate : "105%",
-    };
-  } catch {
-    await purgeStaging();
-    return NextResponse.json({ error: "Неверные параметры генерации." }, { status: 400 });
-  }
-
-  if (!geminiConfigured()) {
-    await purgeStaging();
-    return NextResponse.json({ error: NO_GEMINI_KEY }, { status: 503 });
-  }
-
-  const preset = presetById(project.stylePreset);
-  if (!preset) {
-    await purgeStaging();
-    return NextResponse.json({ error: "Пресет проекта не найден." }, { status: 400 });
   }
 
   try {
@@ -261,160 +220,7 @@ export async function POST(
     // Временная копия больше не нужна: оригинал уже в каталоге проекта.
     await purgeStaging();
 
-    // Бюджет проверяем до обращения к модели, а не после: заявка уже стоит денег.
-    const summary = await readUsage(user.id, user.isAdmin);
-    const blocked = budgetBlock(summary, 0.1);
-    if (blocked) {
-      await purgeStaging();
-      return NextResponse.json({ error: blocked }, { status: 402 });
-    }
-
-    const generation = await payload.create({
-      collection: "generations",
-      data: {
-        project: project.id,
-        kind: "script",
-        params: { ...genParams, preset: preset.id, sourceLang: project.sourceLang },
-        status: "running",
-      },
-      overrideAccess: true,
-    });
-
-    let outcome;
-    try {
-      // E4: чему научили прошлые события этого переводчика. Отказ здесь не
-      // повод срывать генерацию — без выводов скрипт просто будет обычным.
-      const debriefNotes = await debriefNotesFor(payload, user.id, project.id).catch(
-        (error: unknown) => {
-          console.error("[documents] не удалось собрать выводы из разборов", error);
-          return [] as string[];
-        },
-      );
-
-      outcome = await generateScript({
-        preset,
-        params: {
-          sourceLang: project.sourceLang,
-          targetLang: project.targetLang,
-          ...genParams,
-        },
-        documentText: extracted.text || undefined,
-        pdfBytes: extracted.pdfBytes,
-        eventName: project.eventName ?? undefined,
-        debriefNotes,
-      });
-    } catch (error) {
-      await payload.update({
-        collection: "generations",
-        id: generation.id,
-        data: { status: "failed", error: explainGeminiError(error) },
-        overrideAccess: true,
-      });
-      await purgeStaging();
-      return NextResponse.json({ error: explainGeminiError(error) }, { status: 502 });
-    }
-
-    const { script } = outcome;
-    const files: { kind: "script" | "ssml" | "glossary"; body: string; type: string }[] = [
-      { kind: "script", body: scriptToMarkdown(script), type: "text/markdown" },
-      { kind: "ssml", body: script.ssml, type: "application/ssml+xml" },
-      { kind: "glossary", body: glossaryToCsv(script), type: "text/csv" },
-    ];
-
-    // Пути артефактов постоянны (`projects/3/script.md`), и вторая генерация
-    // перезаписывает файл. Прежние строки после этого указывают на новый файл,
-    // но показывают старый размер — список врёт о том, что скачаешь. Поэтому
-    // старые записи убираем, как это делает озвучка.
-    const stale = await payload.find({
-      collection: "artifacts",
-      where: {
-        and: [
-          { project: { equals: project.id } },
-          { kind: { in: ["script", "ssml", "glossary"] } },
-        ],
-      },
-      limit: 100,
-      depth: 0,
-      overrideAccess: true,
-    });
-    for (const old of stale.docs) {
-      await payload.delete({ collection: "artifacts", id: old.id, overrideAccess: true });
-    }
-
-    for (const file of files) {
-      if (!file.body) continue;
-      const blobPath = artifactPath(project.id, `${file.kind}.${file.kind === "glossary" ? "csv" : file.kind === "ssml" ? "ssml" : "md"}`);
-      const { bytes } = await putArtifact(blobPath, file.body, file.type);
-      await payload.create({
-        collection: "artifacts",
-        data: { project: project.id, generation: generation.id, kind: file.kind, blobPath, bytes },
-        overrideAccess: true,
-      });
-    }
-
-    // Термин, уже лежащий в глоссарии, второй раз не заводим: при повторной
-    // генерации он уехал бы в выгрузку для кабины дважды. И не переписываем:
-    // существующий мог быть выверен человеком или добыт на событии, а это
-    // ценнее свежей догадки модели.
-    const known = new Set(
-      (
-        await payload.find({
-          collection: "glossary-terms",
-          where: { project: { equals: project.id } },
-          limit: 5000,
-          depth: 0,
-          overrideAccess: true,
-        })
-      ).docs.map((term) => term.sourceTerm.trim().toLowerCase()),
-    );
-
-    for (const item of script.glossary) {
-      const key = item.source.trim().toLowerCase();
-      if (!key || known.has(key)) continue;
-      known.add(key);
-      await payload.create({
-        collection: "glossary-terms",
-        data: {
-          project: project.id,
-          sourceTerm: item.source,
-          targetTerm: item.target,
-          note: item.note,
-          status: "suggested",
-        },
-        overrideAccess: true,
-      });
-    }
-
-    await payload.update({
-      collection: "generations",
-      id: generation.id,
-      data: {
-        status: "done",
-        model: outcome.model,
-        chars: outcome.inputTokens + outcome.outputTokens,
-        costUsd: outcome.costUsd,
-      },
-      overrideAccess: true,
-    });
-
-    await payload.update({
-      collection: "projects",
-      id: project.id,
-      data: { status: "scripted" },
-      overrideAccess: true,
-    });
-
-    await recordUsage({
-      userId: user.id,
-      projectId: project.id,
-      kind: "script",
-      chars: outcome.inputTokens + outcome.outputTokens,
-      costUsd: outcome.costUsd,
-      tier: outcome.model,
-    });
-
     await recordStep(payload, "document_uploaded", { user: user.id, project: project.id });
-    await recordStep(payload, "script_generated", { user: user.id, project: project.id });
 
     return NextResponse.json({
       id: document.id,
@@ -422,11 +228,6 @@ export async function POST(
       kind: extracted.kind,
       pages: extracted.pages,
       extractedChars: extracted.kind === "pdf" ? null : extracted.text.length,
-      title: script.title,
-      segments: script.segments.length,
-      glossary: script.glossary.length,
-      costUsd: outcome.costUsd,
-      warnings: outcome.warnings,
     });
   } catch (error) {
     await purgeStaging();
@@ -452,6 +253,3 @@ function safeFilename(raw: string | undefined): string | null {
     .slice(0, 180);
   return clean || null;
 }
-
-const clamp = (value: number, min: number, max: number, fallback: number): number =>
-  Number.isFinite(value) ? Math.min(Math.max(value, min), max) : fallback;

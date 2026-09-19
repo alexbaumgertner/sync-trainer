@@ -167,5 +167,7 @@ test("кнопка сборки не работает без материало�
 
   const build = page.getByRole("button", { name: /Собрать глоссарий|Дособрать по материалам/ });
   await expect(build).toBeDisabled();
-  await expect(page.getByText("Сначала загрузите материалы события")).toBeVisible();
+  await expect(
+    page.getByText("Сначала загрузите материалы события — собирать не из чего."),
+  ).toBeVisible();
 });

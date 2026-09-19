@@ -9,6 +9,7 @@ import { geminiConfigured, explainGeminiError, NO_GEMINI_KEY } from "@/lib/gemin
 import { presetById } from "@/presets";
 import { activeGeneration, failStaleGenerations } from "@/lib/generations";
 import { runAfterResponse } from "@/lib/background";
+import { addNewTerms } from "@/lib/glossary-store";
 import { budgetBlock, readUsage, recordUsage } from "@/lib/usage";
 
 export const runtime = "nodejs";
@@ -166,25 +167,13 @@ export async function POST(
         eventName: project.eventName ?? undefined,
       });
 
-      const seen = new Set(known.map((term) => term.source.trim().toLowerCase()));
-      let added = 0;
-      for (const term of outcome.terms) {
-        const key = term.source.trim().toLowerCase();
-        if (!key || seen.has(key)) continue;
-        seen.add(key);
-        await payload.create({
-          collection: "glossary-terms",
-          data: {
-            project: projectId,
-            sourceTerm: term.source,
-            targetTerm: term.target,
-            note: term.note,
-            status: "suggested",
-          },
-          overrideAccess: true,
-        });
-        added += 1;
-      }
+      const merged = await addNewTerms(
+        payload,
+        projectId,
+        outcome.terms,
+        known.map((term) => term.source),
+      );
+      const added = merged.added;
 
       await payload.update({
         collection: "generations",

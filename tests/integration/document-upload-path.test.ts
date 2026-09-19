@@ -93,6 +93,12 @@ afterAll(async () => {
 });
 
 /**
+ * Содержимое у каждого случая своё, и это не прихоть: с R3 повторная загрузка
+ * того же файла отклоняется как дубль (I4). Одинаковый docx во всех проверках
+ * означал бы, что вторая и дальше получают 409 вместо того, что проверяют.
+ */
+
+/**
  * Найдено живым использованием: к пути в хранилище приклеен случайный суффикс
  * (`addRandomSuffix`), и он показывался человеку как часть названия файла —
  * «Концепт-нота-GGBuGU8DFs7mZty1IaY9rZKikCRhHT.pdf».
@@ -103,7 +109,7 @@ describe("имя файла в списке документов", () => {
     const zip = new JSZip();
     zip.file("[Content_Types].xml", '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
     zip.folder("_rels")!.file(".rels", '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
-    zip.folder("word")!.file("document.xml", '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>текст</w:t></w:r></w:p></w:body></w:document>');
+    zip.folder("word")!.file("document.xml", '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>текст-{stamp}-1</w:t></w:r></w:p></w:body></w:document>');
     storedBytes = await zip.generateAsync({ type: "nodebuffer" });
 
     // Ключа модели в тесте нет — генерация остановится на этом, но запись
@@ -132,7 +138,7 @@ describe("имя файла в списке документов", () => {
     const zip = new JSZip();
     zip.file("[Content_Types].xml", '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
     zip.folder("_rels")!.file(".rels", '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
-    zip.folder("word")!.file("document.xml", '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>текст</w:t></w:r></w:p></w:body></w:document>');
+    zip.folder("word")!.file("document.xml", '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>текст-{stamp}-2</w:t></w:r></w:p></w:body></w:document>');
     storedBytes = await zip.generateAsync({ type: "nodebuffer" });
 
     // Имя приходит из браузера и попадает человеку на экран.

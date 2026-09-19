@@ -138,10 +138,9 @@ test("числовое поле стирается досуха, и ноль н�
   await expect(speakers).toHaveValue("5");
 });
 
-test("при отказе генерации ошибка видна, а содержимое документа не утекает", async ({ page, context }) => {
-  // Тест намеренно не привязан к тому, настроен ли ключ модели: в CI его нет,
-  // локально бывает. Проверяем то, что должно быть верно в обоих случаях —
-  // человек видит причину, а текст документа в базу не попадает.
+test("содержимое документа не утекает в базу", async ({ page, context }) => {
+  // F2: в базу идут только метаданные. С R3 загрузка вообще не обращается
+  // к модели, поэтому проверка стала прямее: загрузили — ищем фразу везде.
   await signIn(context);
   await page.goto(`/projects/${projectId}`);
 
@@ -151,12 +150,9 @@ test("при отказе генерации ошибка видна, а сод�
     mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     buffer: await makeDocx(marker),
   });
-  await page.getByRole("button", { name: "Загрузить и сгенерировать" }).click();
+  await page.getByRole("button", { name: "Загрузить", exact: true }).click();
 
-  // Либо готово, либо внятная ошибка — но не тишина
-  await expect(
-    page.getByText(/Готово\.|GEMINI_API_KEY|Квота|не удалось|Не удалось/),
-  ).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText(/загружен/)).toBeVisible({ timeout: 60_000 });
 
   expect(await findInDatabase(marker)).toEqual([]);
 });
@@ -170,14 +166,13 @@ test("посторонний формат отклоняется", async ({ page
     mimeType: "image/png",
     buffer: Buffer.from("не документ"),
   });
-  await page.getByRole("button", { name: "Загрузить и сгенерировать" }).click();
+  await page.getByRole("button", { name: "Загрузить", exact: true }).click();
 
   await expect(page.getByText(/Поддерживаются PDF, DOCX и PPTX/)).toBeVisible();
 });
 
 test("оригинал остаётся после загрузки и уходит только по кнопке", async ({ page, context }) => {
-  // Главная проверка отмены F1. Намеренно не зависит от ключа модели: запись
-  // о документе и его оригинал появляются ДО обращения к ней.
+  // Главная проверка отмены F1.
   await signIn(context);
   await page.goto(`/projects/${projectId}`);
 
@@ -187,12 +182,9 @@ test("оригинал остаётся после загрузки и уход�
     mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     buffer: await makeDocx(marker),
   });
-  await page.getByRole("button", { name: "Загрузить и сгенерировать" }).click();
+  await page.getByRole("button", { name: "Загрузить", exact: true }).click();
 
-  // Ждём конца обработки — успешной или нет, нам важно состояние документа
-  await expect(
-    page.getByText(/Готово\.|GEMINI_API_KEY|Квота|не удалось|Не удалось/),
-  ).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText(/загружен/)).toBeVisible({ timeout: 60_000 });
   await page.reload();
 
   const row = page.locator("li", { hasText: "stored-" }).first();

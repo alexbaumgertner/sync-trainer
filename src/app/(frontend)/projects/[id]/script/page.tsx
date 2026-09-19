@@ -48,8 +48,8 @@ export default async function ScriptPage({ params }: { params: Promise<{ id: str
         <div className="rounded-lg border border-dashed border-neutral-300 px-6 py-10 text-center dark:border-neutral-700">
           <p className="text-sm font-medium">Скрипта ещё нет</p>
           <p className="mx-auto mt-2 max-w-md text-sm text-neutral-500 dark:text-neutral-400">
-            Загрузите документ на карточке проекта — скрипт, глоссарий и разметка
-            сгенерируются за один раз.
+            Работа идёт по порядку: материалы события, глоссарий по ним, и уже
+            из выверенного глоссария — скрипт. Всё это на карточке проекта.
           </p>
           <Link
             href={`/projects/${projectId}`}

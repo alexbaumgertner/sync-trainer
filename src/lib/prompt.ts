@@ -49,6 +49,14 @@ export interface PromptContext {
   /** Выводы из прошлых разборов этого переводчика (E4). */
   debriefNotes?: string[];
   eventName?: string;
+  /**
+   * Выверенный глоссарий проекта (N4).
+   *
+   * Ради этого списка релиз и затевался. Пока его здесь не было, правка
+   * терминов руками ни на что не влияла: скрипт уже был написан, а
+   * перегенерация выбрасывала правки и спрашивала термины заново.
+   */
+  glossary?: { source: string; target: string | null; locked: boolean }[];
 }
 
 const LANGUAGE_NAMES: Record<string, string> = {
@@ -237,6 +245,42 @@ export function buildScriptPrompt(context: PromptContext): string {
     );
   }
 
+  if (context.glossary?.length) {
+    const locked = context.glossary.filter((term) => term.locked);
+    sections.push(
+      [
+        "# Глоссарий события",
+        "",
+        "Переводчик собрал и выверил термины ЗАРАНЕЕ, по материалам заказчика. " +
+          "Это не подсказка, а задание: речь должна быть такой, чтобы эти " +
+          "единицы в ней действительно прозвучали.",
+        "",
+        `Термины (${context.glossary.length}), исходная форма — эквивалент:`,
+        "",
+        DATA_NOTICE,
+        "",
+        FENCE,
+        ...context.glossary.map((term) =>
+          `- ${fenceOff(term.source)}${term.target ? ` — ${fenceOff(term.target)}` : ""}` +
+          (term.locked ? " [выверен]" : ""),
+        ),
+        FENCE,
+        "",
+        "Как этим пользоваться:",
+        "- вплети как можно больше этих единиц в реплики, естественно, а не списком;",
+        "- исходную форму бери как есть: она и есть то, что переводчик будет узнавать на слух;",
+        locked.length
+          ? "- помеченные [выверен] не переписывай и не заменяй синонимами: их проверил " +
+            "человек, и в кабине он ждёт именно их."
+          : "",
+        "- перевод внутрь скрипта не вставляй: эквиваленты даны, чтобы ты понимал, " +
+          "о чём речь, а не чтобы переводить.",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    );
+  }
+
   sections.push(
     [
       "# Чего не делать",
@@ -258,7 +302,11 @@ export function buildScriptPrompt(context: PromptContext): string {
       "Верни структуру по заданной схеме:",
       "- segments — реплики по порядку: говорящий, тайм-код, текст. " +
         "Разметку для синтеза мы соберём сами, возвращать её не нужно.",
-      `- glossary — термины с эквивалентами на ${LANGUAGE_NAMES[params.targetLang] ?? params.targetLang}`,
+      context.glossary?.length
+        ? "- glossary — ТОЛЬКО те термины, которых нет в глоссарии события выше. " +
+          "Уже заведённые не повторяй: они никуда не делись, и вторая запись " +
+          "о том же термине попадёт в кабину дважды."
+        : `- glossary — термины с эквивалентами на ${LANGUAGE_NAMES[params.targetLang] ?? params.targetLang}`,
       "",
       "Источники эквивалентов для глоссария:",
       ...preset.terminologySources.map((source) => `- ${source}`),

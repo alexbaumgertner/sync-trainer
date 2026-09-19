@@ -3,11 +3,15 @@ import JSZip from "jszip";
 import { Client } from "pg";
 
 /**
- * Требование F2 на полном пути: загрузка → разбор → генерация → сохранение.
+ * Требование F2 на полном пути: загрузка → сборка глоссария → скрипт.
  *
- * Проверять это надо именно при УСПЕШНОЙ генерации: только тогда текст
- * документа вообще куда-то течёт. Модель подменяем — настоящий вызов стоит
- * денег и требует ключа, а проверяем мы не её, а своё обещание.
+ * Путь с R3 разложен на три запроса, и текст документа течёт в модель на
+ * двух последних. Проверять F2 надо именно при УСПЕШНОЙ работе: только
+ * тогда текст вообще куда-то идёт. Модель подменяем — настоящий вызов
+ * стоит денег и требует ключа, а проверяем мы не её, а своё обещание.
+ *
+ * Сборка и генерация идут фоном, после ответа, поэтому тест ждёт не ответа
+ * маршрута, а записи в `generations`: именно её видит и человек на странице.
  */
 
 const generateContent = vi.fn();
@@ -43,6 +47,10 @@ vi.mock("next/headers", () => ({
 
 const { payloadClient } = await import("@/lib/payload");
 const { POST } = await import("@/app/api/projects/[id]/documents/route");
+const { POST: BUILD_GLOSSARY } = await import(
+  "@/app/api/projects/[id]/glossary/build/route"
+);
+const { POST: BUILD_SCRIPT } = await import("@/app/api/projects/[id]/script/route");
 const { issueToken, SESSION_COOKIE } = await import("@/lib/session");
 
 const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -92,6 +100,12 @@ async function findInDatabase(needle: string): Promise<string[]> {
   }
 }
 
+/** Ответ модели на сборку глоссария: у неё своя схема, отдельная от скрипта. */
+const glossaryReply = (terms: { source: string; target: string }[]) => ({
+  text: JSON.stringify({ terms }),
+  usageMetadata: { promptTokenCount: 8000, candidatesTokenCount: 1000 },
+});
+
 const BREAK = '<break time="1.5s"/>';
 const modelReply = {
   title: "Панель о равенстве",
@@ -136,10 +150,6 @@ afterAll(async () => {
 async function upload(fileBuffer: Buffer, name: string, type: string): Promise<Response> {
   const form = new FormData();
   form.append("file", new File([new Uint8Array(fileBuffer)], name, { type }));
-  form.append("durationMin", "20");
-  form.append("speakers", "2");
-  form.append("termDensity", "40");
-  form.append("rate", "105%");
 
   const { token } = issueToken(userId);
   sessionCookie = token;
@@ -152,13 +162,63 @@ async function upload(fileBuffer: Buffer, name: string, type: string): Promise<R
   return POST(request, { params: Promise.resolve({ id: String(projectId) }) });
 }
 
-describe("полный путь документа", () => {
-  it("генерирует скрипт и не оставляет текста документа в базе", async () => {
-    generateContent.mockResolvedValueOnce({
-      text: JSON.stringify(modelReply),
-      usageMetadata: { promptTokenCount: 20000, candidatesTokenCount: 4000 },
-    });
+const authorized = (path: string, body?: unknown): Request => {
+  const { token } = issueToken(userId);
+  sessionCookie = token;
+  return new Request(`http://localhost/api/projects/${projectId}/${path}`, {
+    method: "POST",
+    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: { cookie: `${SESSION_COOKIE}=${token}`, "content-type": "application/json" },
+  });
+};
 
+/**
+ * Ждём, пока фоновая работа допишет свою запись.
+ *
+ * Именно запись, а не ответ маршрута: маршрут отвечает 202 сразу, а человек
+ * на странице смотрит на `generations`. Проверять надо то, на что смотрит он.
+ */
+async function settle(kind: "glossary" | "script", timeoutMs = 20_000) {
+  const until = Date.now() + timeoutMs;
+  for (;;) {
+    const found = await payload.find({
+      collection: "generations",
+      where: { and: [{ project: { equals: projectId } }, { kind: { equals: kind } }] },
+      sort: "-createdAt",
+      limit: 1,
+      depth: 0,
+      overrideAccess: true,
+    });
+    const doc = found.docs[0];
+    if (doc && (doc.status === "done" || doc.status === "failed")) return doc;
+    if (Date.now() > until) throw new Error(`работа ${kind} не завершилась за ${timeoutMs} мс`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
+const buildGlossary = async (terms: { source: string; target: string }[]) => {
+  generateContent.mockResolvedValueOnce(glossaryReply(terms));
+  const response = await BUILD_GLOSSARY(authorized("glossary/build"), {
+    params: Promise.resolve({ id: String(projectId) }),
+  });
+  if (response.status === 202) await settle("glossary");
+  return response;
+};
+
+const buildScript = async (terms: { source: string; target: string }[]) => {
+  generateContent.mockResolvedValueOnce({
+    text: JSON.stringify({ ...modelReply, glossary: terms }),
+    usageMetadata: { promptTokenCount: 20000, candidatesTokenCount: 4000 },
+  });
+  const response = await BUILD_SCRIPT(authorized("script", { durationMin: 20, speakers: 2 }), {
+    params: Promise.resolve({ id: String(projectId) }),
+  });
+  if (response.status === 202) await settle("script");
+  return response;
+};
+
+describe("полный путь документа", () => {
+  it("текст документа доходит до модели и не оседает в базе", async () => {
     const response = await upload(
       await makeDocx(SECRET),
       "note.docx",
@@ -166,21 +226,24 @@ describe("полный путь документа", () => {
     );
     expect(response.status).toBe(200);
 
-    const body = (await response.json()) as { title: string; glossary: number; costUsd: number };
-    expect(body.title).toBe("Панель о равенстве");
-    expect(body.glossary).toBe(1);
-    expect(body.costUsd).toBeGreaterThan(0);
+    // Загрузка больше ничего не генерирует: она кончается загрузкой.
+    const uploaded = (await response.json()) as { id: number; pages: number | null };
+    expect(uploaded.id).toBeGreaterThan(0);
+    expect(generateContent).not.toHaveBeenCalled();
 
-    // Модель получила текст документа — иначе генерировать было бы не из чего
-    const prompt = JSON.stringify(generateContent.mock.calls[0][0]);
-    expect(prompt).toContain(SECRET);
+    await buildGlossary([{ source: "backlash", target: "откат" }]);
+    await buildScript([{ source: "backlash", target: "откат" }]);
+
+    // Модель получила текст документа — иначе собирать было бы не из чего
+    const prompts = JSON.stringify(generateContent.mock.calls);
+    expect(prompts).toContain(SECRET);
 
     // А в базе его нет нигде (F2)
     const hits = await findInDatabase(SECRET);
     expect(hits, `фраза найдена в: ${hits.join(", ")}`).toEqual([]);
   });
 
-  it("складывает артефакты, глоссарий и расход", async () => {
+  it("складывает артефакты, глоссарий и оба расхода", async () => {
     const artifacts = await payload.find({
       collection: "artifacts",
       where: { project: { equals: projectId } },
@@ -195,12 +258,14 @@ describe("полный путь документа", () => {
     });
     expect(terms.totalDocs).toBe(1);
 
+    // B4: у сборки глоссария своя статья расхода, у скрипта своя.
     const usage = await payload.find({
       collection: "usage-events",
       where: { project: { equals: projectId } },
+      limit: 10,
       overrideAccess: true,
     });
-    expect(usage.docs[0]?.kind).toBe("script");
+    expect(usage.docs.map((u) => u.kind).sort()).toEqual(["glossary", "script"]);
 
     const project = await payload.findByID({
       collection: "projects",
@@ -210,29 +275,75 @@ describe("полный путь документа", () => {
     expect(project.status).toBe("scripted");
   });
 
-  it("при отказе модели ничего лишнего не остаётся", async () => {
-    generateContent.mockRejectedValueOnce(new Error("API key not valid"));
-    const marker = `ОТКАЗ-${stamp}`;
+  it("скрипт не генерируется, пока нет глоссария", async () => {
+    // N3: не придирка к порядку кнопок. Речь строится вокруг выверенных
+    // терминов, и без них генерировать нечего.
+    const empty = await payload.create({
+      collection: "projects",
+      data: {
+        title: `Без глоссария ${stamp}`,
+        owner: userId,
+        sourceLang: "en",
+        targetLang: "ru",
+        stylePreset: "un",
+        status: "draft",
+      },
+      overrideAccess: true,
+    });
 
-    const response = await upload(
+    // Материалы есть, глоссария нет — проверяем именно второе условие
+    await payload.create({
+      collection: "documents",
+      data: {
+        project: empty.id,
+        filename: "deck.pdf",
+        mime: "application/pdf",
+        bytes: 10,
+        sha256: `sha-${stamp}`,
+        blobPath: `projects/${empty.id}/source-1.pdf`,
+      },
+      overrideAccess: true,
+    });
+
+    const { token } = issueToken(userId);
+    sessionCookie = token;
+    const response = await BUILD_SCRIPT(
+      new Request(`http://localhost/api/projects/${empty.id}/script`, {
+        method: "POST",
+        headers: { cookie: `${SESSION_COOKIE}=${token}` },
+      }),
+      { params: Promise.resolve({ id: String(empty.id) }) },
+    );
+
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toContain("глоссарий");
+
+    await payload.delete({ collection: "projects", id: empty.id, overrideAccess: true });
+  });
+
+  it("при отказе модели работа помечена отказом, а текста в базе нет", async () => {
+    const marker = `ОТКАЗ-${stamp}`;
+    await upload(
       await makeDocx(marker),
       "bad.docx",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     );
-    expect(response.status).toBe(502);
-    expect((await response.json()).error).toContain("недействителен");
 
-    expect(await findInDatabase(marker)).toEqual([]);
-
-    const failed = await payload.find({
-      collection: "generations",
-      where: { and: [{ project: { equals: projectId } }, { status: { equals: "failed" } }] },
-      overrideAccess: true,
+    generateContent.mockRejectedValueOnce(new Error("API key not valid"));
+    const response = await BUILD_GLOSSARY(authorized("glossary/build"), {
+      params: Promise.resolve({ id: String(projectId) }),
     });
-    expect(failed.totalDocs).toBe(1);
+    expect(response.status).toBe(202);
+
+    const generation = await settle("glossary");
+    expect(generation.status).toBe("failed");
+    expect(generation.error).toContain("недействителен");
+
+    // Текст документа не остаётся даже в записи об ошибке
+    expect(await findInDatabase(marker)).toEqual([]);
   });
 
-  it("посторонний формат отклоняется до обращения к модели", async () => {
+  it("посторонний формат отклоняется до всякой работы", async () => {
     generateContent.mockReset();
     const response = await upload(Buffer.from("не документ"), "pic.png", "image/png");
     expect(response.status).toBe(415);
@@ -246,27 +357,10 @@ describe("полный путь документа", () => {
  * оба ведущие на один файл, а в глоссарии задвоились термины.
  */
 describe("повторная генерация", () => {
-  const reply = (terms: { source: string; target: string }[]) => ({
-    ...modelReply,
-    glossary: terms,
-  });
-
-  const generateWith = async (terms: { source: string; target: string }[]) => {
-    generateContent.mockReset();
-    generateContent.mockResolvedValueOnce({
-      text: JSON.stringify(reply(terms)),
-      usageMetadata: { promptTokenCount: 20000, candidatesTokenCount: 4000 },
-    });
-    return upload(
-      await makeDocx(`повтор ${Math.random()}`),
-      "Концепт-нота.docx",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    );
-  };
-
   it("не плодит записи о файлах: путь один, значит и строка одна", async () => {
-    expect((await generateWith([{ source: "alpha", target: "альфа" }])).status).toBe(200);
-    expect((await generateWith([{ source: "beta", target: "бета" }])).status).toBe(200);
+    generateContent.mockReset();
+    expect((await buildScript([{ source: "alpha", target: "альфа" }])).status).toBe(202);
+    expect((await buildScript([{ source: "beta", target: "бета" }])).status).toBe(202);
 
     const artifacts = await payload.find({
       collection: "artifacts",
@@ -282,11 +376,12 @@ describe("повторная генерация", () => {
   });
 
   it("не задваивает термины глоссария", async () => {
-    await generateWith([
+    generateContent.mockReset();
+    await buildScript([
       { source: "headroom", target: "запас" },
       { source: "graduation", target: "утрата права" },
     ]);
-    await generateWith([
+    await buildScript([
       { source: "headroom", target: "другой перевод" },
       { source: "rechannelling", target: "перенаправление" },
     ]);
@@ -306,5 +401,4 @@ describe("повторная генерация", () => {
     const headroom = terms.docs.find((t) => t.sourceTerm.toLowerCase() === "headroom");
     expect(headroom?.targetTerm).toBe("запас");
   });
-
 });

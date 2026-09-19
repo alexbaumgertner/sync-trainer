@@ -16,6 +16,7 @@ import AppShell from "@/components/app-shell";
 import DangerousDelete from "@/components/dangerous-delete";
 import DocumentUpload from "@/components/document-upload";
 import GlossaryBuild from "@/components/glossary-build";
+import ScriptBuild from "@/components/script-build";
 import GlossaryEditor from "@/components/glossary-editor";
 import { payloadClient } from "@/lib/payload";
 import { toTermRow } from "@/lib/glossary";
@@ -215,6 +216,27 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         )}
       </section>
 
+      {/*
+        Скрипт стоит после глоссария, а не до: он из него и растёт (N3).
+        Кнопка не работает, пока терминов нет, и говорит об этом прямо —
+        порядок работы должен читаться со страницы, а не из документации.
+      */}
+      <section className="mb-8">
+        <h2 className="mb-3 text-sm font-medium">Тренировочный скрипт</h2>
+        <p className="mb-4 max-w-prose text-sm text-neutral-500">
+          Речь пишется вокруг ваших терминов: выверенные эквиваленты уходят в
+          задание модели, и переписывать их она не станет. Новые термины,
+          встреченные по дороге, добавятся в глоссарий как предложенные.
+        </p>
+
+        <ScriptBuild
+          projectId={project.id}
+          hasDocuments={documents.some((doc) => doc.hasSource)}
+          termCount={glossaryCount}
+          hasScript={shownFiles.some((file) => file.kind === "script")}
+        />
+      </section>
+
       <section className="mb-8">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-medium">Файлы проекта</h2>
@@ -228,7 +250,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         {shownFiles.length === 0 ? (
           <p className="text-sm text-neutral-500">
             Здесь появятся скрипт, аудио и выгрузка глоссария — всё, к чему можно
-            вернуться перед следующим прогоном.
+            вернуться перед следующим прогоном. Скрипт сгенерируется кнопкой выше,
+            звук — на странице скрипта.
           </p>
         ) : (
           <ul className="divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
