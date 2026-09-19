@@ -36,6 +36,14 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
   const { project, files, documents, ratings, costUsd, glossaryCount, hasDebrief } = detail;
 
+  /**
+   * SSML в списке не показывается: это промежуточный формат между скриптом
+   * и синтезом, а не результат, к которому возвращаются. Скачать его
+   * по-прежнему можно — маршрут файлов его отдаёт, — но место в списке
+   * он занимал наравне со скриптом и звуком и сбивал с толку.
+   */
+  const shownFiles = files.filter((file) => file.kind !== "ssml");
+
   return (
     <AppShell email={user.email} title={project.title}>
       <div className="mb-6 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
@@ -89,14 +97,14 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             Скрипт и озвучка
           </Link>
         </div>
-        {files.length === 0 ? (
+        {shownFiles.length === 0 ? (
           <p className="text-sm text-neutral-500">
-            Здесь появятся скрипт, SSML, аудио и выгрузка глоссария — всё, к чему можно
+            Здесь появятся скрипт, аудио и выгрузка глоссария — всё, к чему можно
             вернуться перед следующим прогоном.
           </p>
         ) : (
           <ul className="divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
-            {files.map((file) => (
+            {shownFiles.map((file) => (
               <li key={file.id} className="flex flex-wrap items-baseline gap-x-3 py-2">
                 <span className="font-medium">{file.label}</span>
                 <span className="text-xs text-neutral-500">{formatBytes(file.bytes)}</span>

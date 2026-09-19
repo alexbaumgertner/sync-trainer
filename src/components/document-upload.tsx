@@ -118,9 +118,9 @@ export default function DocumentUpload({ projectId, clientUpload }: {
   return (
     <form onSubmit={submit} className="flex flex-col gap-3">
       <div className="grid gap-3 sm:grid-cols-4">
-        <Number label="Минут" value={durationMin} min={5} max={30} onChange={setDurationMin} />
-        <Number label="Спикеров" value={speakers} min={2} max={6} onChange={setSpeakers} />
-        <Number label="Терминов" value={termDensity} min={20} max={60} onChange={setTermDensity} />
+        <NumberField label="Минут" value={durationMin} min={5} max={30} onChange={setDurationMin} />
+        <NumberField label="Спикеров" value={speakers} min={2} max={6} onChange={setSpeakers} />
+        <NumberField label="Терминов" value={termDensity} min={20} max={60} onChange={setTermDensity} />
         <label className="block text-xs">
           <span className="mb-1 block text-neutral-500">Темп</span>
           <input
@@ -216,7 +216,20 @@ export default function DocumentUpload({ projectId, clientUpload }: {
   );
 }
 
-function Number({
+/**
+ * Числовое поле, которое можно стереть досуха.
+ *
+ * Состояние здесь строковое, а не числовое, и это единственное, что
+ * отличает его от обычного управляемого поля. Пока значение хранилось
+ * числом, пустая строка превращалась в ноль (`Number("") === 0`), ноль
+ * возвращался в поле — и набранная следом пятёрка читалась как «05».
+ * Стереть значение по умолчанию было нельзя в принципе.
+ *
+ * Родителю число уходит только когда строка в число превращается.
+ * Пустое поле — это «ещё не ввели», а не «ввели ноль», и родителю
+ * в этот момент остаётся прежнее значение.
+ */
+function NumberField({
   label,
   value,
   min,
@@ -229,6 +242,27 @@ function Number({
   max: number;
   onChange: (value: number) => void;
 }) {
+  const [draft, setDraft] = useState(String(value));
+
+  function handleChange(next: string) {
+    setDraft(next);
+    if (next === "") return;
+    const parsed = Number(next);
+    if (Number.isFinite(parsed)) onChange(parsed);
+  }
+
+  /** Приведение к диапазону — на уходе из поля, а не на каждом нажатии:
+   *  иначе набор «12» на пути к дюжине спотыкается о верхнюю границу. */
+  function handleBlur() {
+    const parsed = Number(draft);
+    const next =
+      draft === "" || !Number.isFinite(parsed)
+        ? value
+        : Math.min(max, Math.max(min, parsed));
+    setDraft(String(next));
+    onChange(next);
+  }
+
   return (
     <label className="block text-xs">
       <span className="mb-1 block text-neutral-500">{label}</span>
@@ -236,8 +270,9 @@ function Number({
         type="number"
         min={min}
         max={max}
-        value={value}
-        onChange={(e) => onChange(globalThis.Number(e.target.value))}
+        value={draft}
+        onChange={(e) => handleChange(e.target.value)}
+        onBlur={handleBlur}
         className="w-full rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
       />
     </label>

@@ -114,6 +114,27 @@ test("параметры генерации и предупреждение об
   await expect(page.getByLabel("Перечисление на компрессию")).toBeChecked();
 });
 
+test("числовое поле стирается досуха, и ноль не прилипает к набранной цифре", async ({
+  page,
+  context,
+}) => {
+  // Проверяем значение САМОГО поля, а не состояние нашего компонента: баг
+  // ровно в том, что в поле оставался ноль, хотя внутри всё было «в порядке».
+  await signIn(context);
+  await page.goto(`/projects/${projectId}`);
+
+  const speakers = page.getByLabel("Спикеров");
+  await speakers.fill("");
+  await expect(speakers).toHaveValue("");
+
+  await speakers.pressSequentially("5");
+  await expect(speakers).toHaveValue("5");
+
+  // Уход из поля приводит значение к допустимому диапазону
+  await page.getByLabel("Минут").click();
+  await expect(speakers).toHaveValue("5");
+});
+
 test("при отказе генерации ошибка видна, а содержимое документа не утекает", async ({ page, context }) => {
   // Тест намеренно не привязан к тому, настроен ли ключ модели: в CI его нет,
   // локально бывает. Проверяем то, что должно быть верно в обоих случаях —
