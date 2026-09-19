@@ -66,3 +66,54 @@ export async function deleteProject(formData: FormData): Promise<void> {
   revalidatePath("/projects");
   redirect("/projects");
 }
+
+/**
+ * S2–S3: удаление оригинала документа.
+ *
+ * Именно это действие и есть «удаление оригинала» — раньше его делал
+ * таймер, теперь делает человек. Запись документа остаётся: она говорит,
+ * из чего был собран скрипт, и по её отпечатку узнаётся повторная загрузка
+ * того же файла. Уходит только сам файл.
+ */
+export async function deleteDocumentSource(formData: FormData): Promise<void> {
+  const user = await currentUser();
+  if (!user) redirect("/");
+
+  const documentId = Number(formData.get("documentId"));
+  const projectId = Number(formData.get("projectId"));
+  if (!Number.isInteger(documentId) || !Number.isInteger(projectId)) redirect("/projects");
+
+  const payload = await payloadClient();
+  const project = await payload
+    .findByID({ collection: "projects", id: projectId, depth: 0, overrideAccess: true })
+    .catch(() => null);
+  const ownerId = typeof project?.owner === "object" ? project.owner?.id : project?.owner;
+  if (!project || ownerId !== user.id) redirect("/projects");
+
+  const document = await payload
+    .findByID({ collection: "documents", id: documentId, depth: 0, overrideAccess: true })
+    .catch(() => null);
+  // Принадлежность проверяем отдельно: идентификатор документа приходит из
+  // формы, и без этой проверки чужой документ удалялся бы по чужой ссылке.
+  const documentProjectId =
+    typeof document?.project === "object" ? document.project?.id : document?.project;
+  if (!document || documentProjectId !== projectId) redirect(`/projects/${projectId}`);
+
+  if (document.blobPath) {
+    const { deleteArtifacts } = await import("@/lib/artifacts");
+    await deleteArtifacts([document.blobPath]).catch((error: unknown) => {
+      // Недоступный файл не повод оставлять запись в противоречивом виде:
+      // человек попросил удалить, и на экране должно быть «удалён».
+      console.error("[documents] не удалось удалить оригинал", error);
+    });
+  }
+
+  await payload.update({
+    collection: "documents",
+    id: documentId,
+    data: { blobPath: null, purgedAt: new Date().toISOString() },
+    overrideAccess: true,
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+}

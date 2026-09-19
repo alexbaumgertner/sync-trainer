@@ -11,7 +11,7 @@ import {
   STATUS_LABELS,
   STYLE_PRESET_LABELS,
 } from "@/lib/projects";
-import { deleteProject } from "../actions";
+import { deleteDocumentSource, deleteProject } from "../actions";
 import AppShell from "@/components/app-shell";
 import DangerousDelete from "@/components/dangerous-delete";
 import DocumentUpload from "@/components/document-upload";
@@ -68,13 +68,27 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         {documents.length > 0 && (
           <ul className="divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
             {documents.map((doc) => (
-              <li key={doc.id} className="flex flex-wrap items-baseline gap-x-3 py-2">
+              <li key={doc.id} className="flex flex-wrap items-center gap-x-3 py-2">
                 <span className="font-medium">{doc.filename}</span>
                 <span className="text-xs text-neutral-500">{formatBytes(doc.bytes)}</span>
                 {doc.pages && <span className="text-xs text-neutral-500">{doc.pages} с.</span>}
-                <span className="ml-auto text-xs text-neutral-500">
-                  {doc.purgedAt ? "оригинал удалён" : "обрабатывается"}
-                </span>
+                {doc.hasSource ? (
+                  <>
+                    <span className="ml-auto text-xs text-neutral-500">оригинал хранится</span>
+                    <form action={deleteDocumentSource}>
+                      <input type="hidden" name="documentId" value={doc.id} />
+                      <input type="hidden" name="projectId" value={project.id} />
+                      <DangerousDelete
+                        label="Удалить оригинал"
+                        confirmation={`Удалить оригинал «${doc.filename}»? Запись о документе останется, но собрать по нему заново будет нечего — файл придётся загрузить снова.`}
+                      />
+                    </form>
+                  </>
+                ) : (
+                  <span className="ml-auto text-xs text-neutral-500">
+                    {doc.purgedAt ? "оригинал удалён" : "оригинала нет"}
+                  </span>
+                )}
               </li>
             ))}
           </ul>

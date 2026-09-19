@@ -34,6 +34,46 @@ export default function DocumentUpload({ projectId, clientUpload }: {
   const [rate, setRate] = useState("105%");
   const [traps, setTraps] = useState<string[]>(TRAPS.map((t) => t.value));
 
+  /**
+   * Отправка одной попытки. Вынесена отдельно, потому что попыток бывает
+   * две: сервер отвечает 409 на уже загруженный файл (I4), и человек
+   * решает, настаивать ли.
+   */
+  async function send(file: File, force: boolean): Promise<Response> {
+    const params = { durationMin, speakers, termDensity, rate, traps };
+
+    if (clientUpload) {
+      const { upload } = await import("@vercel/blob/client");
+      // Хранилище приватное — публичная запись в него даёт 400 без
+      // CORS-заголовков, браузер показывает только «CORS», а SDK молча
+      // повторяет попытку семь раз. Отсюда и берётся вечное «Генерирую…».
+      const blob = await upload(`uploads/${projectId}/${file.name}`, file, {
+        access: "private",
+        handleUploadUrl: `/api/projects/${projectId}/documents/upload-token`,
+        contentType: file.type || undefined,
+      });
+      return fetch(`/api/projects/${projectId}/documents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // Путь, а не ссылка: приватный файл по ссылке не скачать, сервер
+        // читает его через SDK. Путь приходит от хранилища — из-за
+        // addRandomSuffix он не равен тому, что просил браузер.
+        // Имя отдаём своё: в пути хранилища к нему приклеен случайный суффикс.
+        body: JSON.stringify({ pathname: blob.pathname, filename: file.name, params, force }),
+      });
+    }
+
+    const form = new FormData();
+    form.append("file", file);
+    form.append("durationMin", String(durationMin));
+    form.append("speakers", String(speakers));
+    form.append("termDensity", String(termDensity));
+    form.append("rate", rate);
+    if (force) form.append("force", "1");
+    for (const trap of traps) form.append("traps", trap);
+    return fetch(`/api/projects/${projectId}/documents`, { method: "POST", body: form });
+  }
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     const file = inputRef.current?.files?.[0];
@@ -49,42 +89,27 @@ export default function DocumentUpload({ projectId, clientUpload }: {
     setDone(null);
     setWarnings([]);
 
-    const params = { durationMin, speakers, termDensity, rate, traps };
-
     try {
-      let response: Response;
+      let response = await send(file, false);
 
-      if (clientUpload) {
-        const { upload } = await import("@vercel/blob/client");
-        // Хранилище приватное — публичная запись в него даёт 400 без
-        // CORS-заголовков, браузер показывает только «CORS», а SDK молча
-        // повторяет попытку семь раз. Отсюда и берётся вечное «Генерирую…».
-        const blob = await upload(`uploads/${projectId}/${file.name}`, file, {
-          access: "private",
-          handleUploadUrl: `/api/projects/${projectId}/documents/upload-token`,
-          contentType: file.type || undefined,
-        });
-        response = await fetch(`/api/projects/${projectId}/documents`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          // Путь, а не ссылка: приватный файл по ссылке не скачать, сервер
-          // читает его через SDK. Путь приходит от хранилища — из-за
-          // addRandomSuffix он не равен тому, что просил браузер.
-          // Имя отдаём своё: в пути хранилища к нему приклеен случайный суффикс.
-          body: JSON.stringify({ pathname: blob.pathname, filename: file.name, params }),
-        });
-      } else {
-        const form = new FormData();
-        form.append("file", file);
-        form.append("durationMin", String(durationMin));
-        form.append("speakers", String(speakers));
-        form.append("termDensity", String(termDensity));
-        form.append("rate", rate);
-        for (const trap of traps) form.append("traps", trap);
-        response = await fetch(`/api/projects/${projectId}/documents`, {
-          method: "POST",
-          body: form,
-        });
+      /**
+       * I4: тот же файл уже загружен.
+       *
+       * Повторяют загрузку обычно не со зла, а решив, что первая пропала.
+       * Поэтому не молча запускаем вторую генерацию за те же деньги, а
+       * спрашиваем — и настаиваем, только если человек подтвердил.
+       */
+      if (response.status === 409) {
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          duplicate?: boolean;
+        };
+        if (!data.duplicate) throw new Error(data.error ?? "HTTP 409");
+        if (!window.confirm(`${data.error} Сгенерировать по нему ещё раз?`)) {
+          setBusy(false);
+          return;
+        }
+        response = await send(file, true);
       }
 
       if (!response.ok) {
@@ -168,12 +193,12 @@ export default function DocumentUpload({ projectId, clientUpload }: {
       </div>
 
       <p className="text-xs text-neutral-500">
-        PDF, DOCX или PPTX до 25 МБ.{" "}
+        PDF, DOCX или PPTX до 25 МБ. Файлов можно загрузить несколько.{" "}
         <strong className="font-medium text-neutral-700 dark:text-neutral-300">
-          Оригинал удаляется сразу после разбора
+          Оригинал хранится, пока вы его не удалите
         </strong>{" "}
-        — перегенерировать скрипт из того же файла потом не получится, документ
-        придётся загрузить снова.
+        — кнопка удаления стоит рядом с каждым документом выше. Текст документа
+        мы не сохраняем ни при каких условиях.
       </p>
 
       {/*

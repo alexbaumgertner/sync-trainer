@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { assertLocalDatabase, loadLocalEnv } from "./tests/local-env";
+import { assertLocalDatabase, loadLocalEnv } from "./tests/local-env.mjs";
 
 /**
  * Окружение для прогона.

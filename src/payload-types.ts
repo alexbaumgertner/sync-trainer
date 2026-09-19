@@ -263,6 +263,10 @@ export interface Project {
    * E5: когда напомнили о разборе. Напоминаем один раз
    */
   debriefRemindedAt?: string | null;
+  /**
+   * S4: когда предложили удалить оригиналы. Предлагаем один раз
+   */
+  sourcesRemindedAt?: string | null;
   sourceLang: 'en' | 'de' | 'fr' | 'tr';
   targetLang: 'ru' | 'en';
   stylePreset: 'un' | 'court' | 'eu' | 'corporate';
@@ -287,7 +291,11 @@ export interface Document {
    */
   extractedChars?: number | null;
   /**
-   * Момент удаления оригинала из хранилища (F1)
+   * S2: где лежит оригинал. Пусто — оригинала больше нет
+   */
+  blobPath?: string | null;
+  /**
+   * S2: когда ВЛАДЕЛЕЦ удалил оригинал. Сам он не удаляется
    */
   purgedAt?: string | null;
   updatedAt: string;
@@ -746,6 +754,7 @@ export interface ProjectsSelect<T extends boolean = true> {
   eventStartsOn?: T;
   eventLocation?: T;
   debriefRemindedAt?: T;
+  sourcesRemindedAt?: T;
   sourceLang?: T;
   targetLang?: T;
   stylePreset?: T;
@@ -765,6 +774,7 @@ export interface DocumentsSelect<T extends boolean = true> {
   sha256?: T;
   pages?: T;
   extractedChars?: T;
+  blobPath?: T;
   purgedAt?: T;
   updatedAt?: T;
   createdAt?: T;

@@ -145,6 +145,8 @@ export interface ProjectDetail {
     bytes: number | null;
     pages: number | null;
     purgedAt: string | null;
+    /** S3: лежит ли оригинал в хранилище прямо сейчас */
+    hasSource: boolean;
   }[];
   /** Оценки материала: годится ли сгенерированное для работы */
   ratings: RatingRow[];
@@ -231,6 +233,7 @@ export async function getProject(id: number, userId: number): Promise<ProjectDet
       bytes: doc.bytes ?? null,
       pages: doc.pages ?? null,
       purgedAt: doc.purgedAt ?? null,
+      hasSource: Boolean(doc.blobPath),
     })),
     ratings: ratings.docs.map(toRatingRow),
     costUsd: usage.docs.reduce((sum, row) => sum + (row.costUsd ?? 0), 0),

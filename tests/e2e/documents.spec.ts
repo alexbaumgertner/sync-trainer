@@ -11,9 +11,10 @@ import { SESSION_COOKIE, issueToken } from "../../src/lib/session";
  * базы. Это не проверка вёрстки, а проверка обещания о конфиденциальности,
  * которое мы даём переводчикам.
  *
- * Удаление самого файла из хранилища (F1) здесь не проверяется: для этого нужен
- * успешный ответ модели, а тест намеренно работает и без ключа. В коде маршрута
- * `purgeOriginal()` вызывается на каждой ветке выхода, включая обе catch-ветки.
+ * С R3 здесь же проверяется обратное обещание: оригинал ОСТАЁТСЯ (S2–S3), пока
+ * его не удалят руками. Проверка работает и без ключа модели намеренно — запись
+ * о документе и его оригинал появляются до обращения к модели, и отказ модели
+ * их не уносит. Это и есть смысл отмены F1: не пришлось бы загружать заново.
  */
 
 const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -100,12 +101,14 @@ test.afterAll(async () => {
   await payload.delete({ collection: "users", id: userId, overrideAccess: true }).catch(() => {});
 });
 
-test("параметры генерации и предупреждение об удалении видны до загрузки", async ({ page, context }) => {
+test("параметры генерации и обещание о хранении видны до загрузки", async ({ page, context }) => {
   await signIn(context);
   await page.goto(`/projects/${projectId}`);
 
-  // F3: человек должен узнать об удалении оригинала до того, как загрузит
-  await expect(page.getByText(/Оригинал удаляется сразу после разбора/)).toBeVisible();
+  // S3: человек должен узнать о судьбе оригинала до того, как загрузит.
+  // Раньше здесь стояло обещание удалить — оно описывало поведение, которого
+  // больше нет, и тест на отмене F1 покраснел ровно там, где должен был.
+  await expect(page.getByText(/Оригинал хранится, пока вы его не удалите/)).toBeVisible();
 
   await expect(page.getByLabel("Минут")).toHaveValue("20");
   await expect(page.getByLabel("Спикеров")).toHaveValue("5");
@@ -170,4 +173,36 @@ test("посторонний формат отклоняется", async ({ page
   await page.getByRole("button", { name: "Загрузить и сгенерировать" }).click();
 
   await expect(page.getByText(/Поддерживаются PDF, DOCX и PPTX/)).toBeVisible();
+});
+
+test("оригинал остаётся после загрузки и уходит только по кнопке", async ({ page, context }) => {
+  // Главная проверка отмены F1. Намеренно не зависит от ключа модели: запись
+  // о документе и его оригинал появляются ДО обращения к ней.
+  await signIn(context);
+  await page.goto(`/projects/${projectId}`);
+
+  const marker = `ХРАНЕНИЕ-${Date.now()}`;
+  await page.getByLabel("Файл документа").setInputFiles({
+    name: `stored-${Date.now()}.docx`,
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    buffer: await makeDocx(marker),
+  });
+  await page.getByRole("button", { name: "Загрузить и сгенерировать" }).click();
+
+  // Ждём конца обработки — успешной или нет, нам важно состояние документа
+  await expect(
+    page.getByText(/Готово\.|GEMINI_API_KEY|Квота|не удалось|Не удалось/),
+  ).toBeVisible({ timeout: 60_000 });
+  await page.reload();
+
+  const row = page.locator("li", { hasText: "stored-" }).first();
+  await expect(row.getByText("оригинал хранится")).toBeVisible();
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await row.getByRole("button", { name: "Удалить оригинал" }).click();
+
+  await expect(row.getByText("оригинал удалён")).toBeVisible();
+  // Запись о документе остаётся: она говорит, из чего собирали, и по её
+  // отпечатку узнаётся повторная загрузка того же файла.
+  await expect(row).toContainText("stored-");
 });

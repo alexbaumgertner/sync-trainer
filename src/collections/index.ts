@@ -277,9 +277,20 @@ export const Projects: CollectionConfig = {
           depth: 0,
           overrideAccess: true,
         });
-        (req.context as Record<string, unknown>).artifactPaths = artifacts.docs
-          .map((doc) => doc.blobPath)
-          .filter(Boolean);
+        // Оригиналы документов лежат в том же каталоге проекта и с R3 живут
+        // до явного удаления — значит их пути тоже надо собрать здесь, иначе
+        // после удаления проекта файлы останутся в хранилище навсегда.
+        const sources = await req.payload.find({
+          collection: "documents",
+          where: { project: { equals: id } },
+          limit: 1000,
+          depth: 0,
+          overrideAccess: true,
+        });
+        (req.context as Record<string, unknown>).artifactPaths = [
+          ...artifacts.docs.map((doc) => doc.blobPath),
+          ...sources.docs.map((doc) => doc.blobPath),
+        ].filter(Boolean);
 
         // Список обязан покрывать КАЖДУЮ коллекцию с обязательной связью
         // на проект. Забыть одну — значит сделать проект неудаляемым, и
@@ -352,6 +363,14 @@ export const Projects: CollectionConfig = {
       },
     },
     {
+      name: "sourcesRemindedAt",
+      type: "date",
+      admin: {
+        readOnly: true,
+        description: "S4: когда предложили удалить оригиналы. Предлагаем один раз",
+      },
+    },
+    {
       name: "sourceLang",
       type: "select",
       required: true,
@@ -391,8 +410,15 @@ export const Projects: CollectionConfig = {
 };
 
 /**
- * F1–F2: оригинал документа удаляется после обработки, здесь остаются только
- * метаданные. Содержимого документа в этой коллекции нет и быть не должно.
+ * Метаданные загруженного документа.
+ *
+ * F1 из R1 отменён в R3 (требования S2–S3): оригинал больше не удаляется сам,
+ * он лежит в хранилище, пока владелец не удалит его руками. Полевая причина —
+ * переводчики оригиналы не удаляют, а для многих организаций материалы
+ * публичны. `purgedAt` остался и означает ровно одно: человек удалил.
+ *
+ * F2 в силе: содержимого документа в этой коллекции нет и быть не должно,
+ * извлечённый текст живёт только в памяти во время обработки.
  */
 export const Documents: CollectionConfig = {
   slug: "documents",
@@ -419,9 +445,14 @@ export const Documents: CollectionConfig = {
       admin: { description: "Длина извлечённого текста. Сам текст не сохраняется (F2)" },
     },
     {
+      name: "blobPath",
+      type: "text",
+      admin: { description: "S2: где лежит оригинал. Пусто — оригинала больше нет" },
+    },
+    {
       name: "purgedAt",
       type: "date",
-      admin: { description: "Момент удаления оригинала из хранилища (F1)" },
+      admin: { description: "S2: когда ВЛАДЕЛЕЦ удалил оригинал. Сам он не удаляется" },
     },
   ],
 };

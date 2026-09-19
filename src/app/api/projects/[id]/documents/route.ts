@@ -18,17 +18,19 @@ export const maxDuration = 300;
 /**
  * Обработка загруженного документа.
  *
- * Требования F1–F2. Оригинал удаляется сразу после разбора, извлечённый текст
- * никуда не пишется: в базу попадают только метаданные и его длина.
+ * Требования S1–S6, I4. Оригинал остаётся в хранилище: F1 из R1 отменён.
+ * Извлечённый текст по-прежнему никуда не пишется (F2) — в базу попадают
+ * только метаданные, его длина и путь к оригиналу.
  *
  * Два пути входа. На Vercel файл приезжает в Blob из браузера, и сюда приходит
- * только путь к нему. Локально, где предела в 4.5 МБ нет, файл можно прислать
- * прямо в теле запроса — тогда он вообще нигде не сохраняется.
+ * только путь к нему во временном каталоге `uploads/`. Локально, где предела
+ * в 4.5 МБ нет, файл идёт прямо в теле запроса. Дальше пути сходятся: оригинал
+ * ложится в каталог проекта рядом с его артефактами, а временная копия — если
+ * она была — убирается.
  *
- * Генерация скрипта идёт здесь же, в одном запросе. Иначе никак: оригинал
- * удаляется сразу после разбора, а держать его между запросами негде —
- * в serverless нет общей памяти, и хранить документ было бы ровно тем,
- * от чего мы отказались.
+ * Каталог проекта, а не `uploads/`, выбран не из аккуратности: удаление
+ * проекта чистит именно его, и оригинал, оставленный в стороне, пережил бы
+ * проект, к которому относится.
  */
 export async function POST(
   request: Request,
@@ -53,6 +55,7 @@ export async function POST(
   let mime: string;
   let blobPath: string | null = null;
   let rawParams: Record<string, unknown> = {};
+  let force = false;
 
   const contentType = request.headers.get("content-type") ?? "";
 
@@ -61,9 +64,11 @@ export async function POST(
       const body = (await request.json()) as {
         pathname?: string;
         filename?: string;
+        force?: boolean;
         params?: Record<string, unknown>;
       };
       rawParams = body.params ?? {};
+      force = Boolean(body.force);
       if (!body.pathname) {
         return NextResponse.json({ error: "Не передан путь загруженного файла." }, { status: 400 });
       }
@@ -99,6 +104,7 @@ export async function POST(
       buffer = Buffer.from(await file.arrayBuffer());
       filename = safeFilename(file.name) ?? "document";
       mime = file.type;
+      force = form.get("force") === "1";
       rawParams = {
         durationMin: form.get("durationMin"),
         speakers: form.get("speakers"),
@@ -114,22 +120,32 @@ export async function POST(
     );
   }
 
-  /** F1: оригинал уходит из хранилища и при успехе, и при ошибке. */
-  const purgeOriginal = async () => {
+  /**
+   * Уборка временной копии из `uploads/`.
+   *
+   * Это не удаление оригинала (S2), а уборка за пересылкой: браузер кладёт
+   * файл во временный каталог, мы читаем его оттуда и переносим в каталог
+   * проекта. Оставленная копия занимала бы место и пережила бы проект.
+   */
+  const purgeStaging = async () => {
     if (!blobPath) return;
-    await del(blobPath).catch((error: unknown) => {
-      console.error("[documents] не удалось удалить оригинал", error);
+    const path = blobPath;
+    // Обнуляем до вызова: ниже по ветвям ошибок уборка зовётся ещё раз,
+    // и повторное удаление уже удалённого пути — лишний поход в хранилище.
+    blobPath = null;
+    await del(path).catch((error: unknown) => {
+      console.error("[documents] не удалось убрать временную копию", error);
     });
   };
 
   if (buffer.byteLength > MAX_UPLOAD_BYTES) {
-    await purgeOriginal();
+    await purgeStaging();
     return NextResponse.json({ error: "Файл больше 25 МБ." }, { status: 413 });
   }
 
   const kind = kindOf(mime, filename);
   if (!kind) {
-    await purgeOriginal();
+    await purgeStaging();
     return NextResponse.json(
       { error: "Поддерживаются PDF, DOCX и PPTX." },
       { status: 415 },
@@ -152,23 +168,53 @@ export async function POST(
       rate: typeof rawParams.rate === "string" && rawParams.rate ? rawParams.rate : "105%",
     };
   } catch {
-    await purgeOriginal();
+    await purgeStaging();
     return NextResponse.json({ error: "Неверные параметры генерации." }, { status: 400 });
   }
 
   if (!geminiConfigured()) {
-    await purgeOriginal();
+    await purgeStaging();
     return NextResponse.json({ error: NO_GEMINI_KEY }, { status: 503 });
   }
 
   const preset = presetById(project.stylePreset);
   if (!preset) {
-    await purgeOriginal();
+    await purgeStaging();
     return NextResponse.json({ error: "Пресет проекта не найден." }, { status: 400 });
   }
 
   try {
     const extracted = await extractDocument(buffer, kind);
+
+    /**
+     * I4: тот же файл второй раз.
+     *
+     * Раньше повторная загрузка молча запускала вторую генерацию и вторые
+     * расходы — а повторяют её как раз тогда, когда первая, кажется, пропала:
+     * человек ушёл со страницы и вернулся. Сверяем по отпечатку содержимого,
+     * а не по имени: «presentation (1).pdf» — тот же файл.
+     */
+    if (!force) {
+      const twin = await payload.find({
+        collection: "documents",
+        where: {
+          and: [{ project: { equals: project.id } }, { sha256: { equals: extracted.sha256 } }],
+        },
+        limit: 1,
+        depth: 0,
+        overrideAccess: true,
+      });
+      if (twin.docs.length > 0) {
+        await purgeStaging();
+        return NextResponse.json(
+          {
+            error: `«${twin.docs[0].filename}» уже загружен в этот проект.`,
+            duplicate: true,
+          },
+          { status: 409 },
+        );
+      }
+    }
 
     // В базу идут только метаданные. Ни текста, ни байтов исходника (F2).
     const document = await payload.create({
@@ -181,16 +227,45 @@ export async function POST(
         sha256: extracted.sha256,
         pages: extracted.pages,
         extractedChars: extracted.kind === "pdf" ? null : extracted.text.length,
-        purgedAt: new Date().toISOString(),
       },
       overrideAccess: true,
     });
+
+    /**
+     * S2: оригинал переезжает в каталог проекта и остаётся там.
+     *
+     * Имя плоское и по идентификатору записи: слой доступа не пускает
+     * вложенные каталоги внутрь проекта, а имя, данное человеком, могло бы
+     * столкнуться с чужим. Не удалось сохранить — это не повод срывать
+     * разбор: помечаем запись как оставшуюся без оригинала и идём дальше.
+     */
+    const sourcePath = artifactPath(project.id, `source-${document.id}.${extracted.kind}`);
+    try {
+      await putArtifact(sourcePath, buffer, mime || "application/octet-stream");
+      await payload.update({
+        collection: "documents",
+        id: document.id,
+        data: { blobPath: sourcePath },
+        overrideAccess: true,
+      });
+    } catch (error) {
+      console.error("[documents] не удалось сохранить оригинал", error);
+      await payload.update({
+        collection: "documents",
+        id: document.id,
+        data: { purgedAt: new Date().toISOString() },
+        overrideAccess: true,
+      });
+    }
+
+    // Временная копия больше не нужна: оригинал уже в каталоге проекта.
+    await purgeStaging();
 
     // Бюджет проверяем до обращения к модели, а не после: заявка уже стоит денег.
     const summary = await readUsage(user.id, user.isAdmin);
     const blocked = budgetBlock(summary, 0.1);
     if (blocked) {
-      await purgeOriginal();
+      await purgeStaging();
       return NextResponse.json({ error: blocked }, { status: 402 });
     }
 
@@ -235,12 +310,9 @@ export async function POST(
         data: { status: "failed", error: explainGeminiError(error) },
         overrideAccess: true,
       });
-      await purgeOriginal();
+      await purgeStaging();
       return NextResponse.json({ error: explainGeminiError(error) }, { status: 502 });
     }
-
-    // Оригинал больше не нужен ни для чего (F1).
-    await purgeOriginal();
 
     const { script } = outcome;
     const files: { kind: "script" | "ssml" | "glossary"; body: string; type: string }[] = [
@@ -357,7 +429,7 @@ export async function POST(
       warnings: outcome.warnings,
     });
   } catch (error) {
-    await purgeOriginal();
+    await purgeStaging();
     console.error("[documents] обработка не удалась", error);
     return NextResponse.json(
       { error: "Не удалось разобрать документ.", detail: (error as Error).message },

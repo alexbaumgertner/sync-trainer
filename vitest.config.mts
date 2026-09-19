@@ -1,5 +1,5 @@
 import { defineConfig } from "vitest/config";
-import { loadLocalEnv } from "./tests/local-env";
+import { loadLocalEnv } from "./tests/local-env.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
