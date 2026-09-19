@@ -192,6 +192,10 @@ test("щелчок по дорожке перематывает", async ({ page,
     return !!audio && Number.isFinite(audio.duration) && audio.duration > 1;
   });
 
+  // Щёлкаем по видимым координатам, поэтому дорожку надо сначала показать.
+  // Без этого тест молча зависел от того, что проигрыватель стоит высоко на
+  // странице: стоило глоссарию встать выше файлов — и щелчок ушёл мимо.
+  await track.scrollIntoViewIfNeeded();
   const box = (await track.boundingBox())!;
   await page.mouse.click(box.x + box.width * 0.75, box.y + box.height / 2);
 

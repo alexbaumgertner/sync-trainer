@@ -16,7 +16,7 @@ import type { Payload } from "payload";
  */
 export const STALE_AFTER_MS = 10 * 60 * 1000;
 
-export type GenerationKind = "script" | "audio";
+export type GenerationKind = "glossary" | "script" | "audio";
 
 export interface GenerationState {
   id: number;

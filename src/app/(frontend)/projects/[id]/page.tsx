@@ -15,6 +15,19 @@ import { deleteDocumentSource, deleteProject } from "../actions";
 import AppShell from "@/components/app-shell";
 import DangerousDelete from "@/components/dangerous-delete";
 import DocumentUpload from "@/components/document-upload";
+import GlossaryBuild from "@/components/glossary-build";
+import GlossaryEditor from "@/components/glossary-editor";
+import { payloadClient } from "@/lib/payload";
+import { toTermRow } from "@/lib/glossary";
+import {
+  addTerm,
+  addVariant,
+  confirmTerm,
+  deleteTerm,
+  promoteVariant,
+  removeVariant,
+  saveTerm,
+} from "./glossary/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +56,23 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
    * он занимал наравне со скриптом и звуком и сбивал с толку.
    */
   const shownFiles = files.filter((file) => file.kind !== "ssml");
+
+  /**
+   * Термины читаем здесь же: глоссарий теперь правится прямо на карточке
+   * проекта (I2), а не только на своей странице. Та осталась запасным
+   * путём — с неё удобнее работать, когда терминов много.
+   */
+  const payload = await payloadClient();
+  const terms = await payload.find({
+    collection: "glossary-terms",
+    where: { project: { equals: project.id } },
+    sort: "sourceTerm",
+    limit: 500,
+    // Глубина 1: нужны имена тех, кто предложил вариант и кто подтвердил.
+    depth: 1,
+    overrideAccess: true,
+  });
+  const termRows = terms.docs.map(toTermRow);
 
   return (
     <AppShell email={user.email} title={project.title}>
@@ -99,6 +129,90 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             clientUpload={Boolean(process.env.BLOB_READ_WRITE_TOKEN)}
           />
         </div>
+      </section>
+
+
+      {/*
+        Глоссарий стоит сразу под материалами и выше файлов со звуком (I1).
+        Порядок на странице — это и есть порядок работы: переводчик начинает
+        с материалов и глоссария, а скрипт и звук растут уже из него. Пока
+        глоссарий висел последним, он читался как побочный продукт.
+      */}
+      <section id="glossary" className="mb-8 scroll-mt-4">
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-sm font-medium">Глоссарий</h2>
+          {glossaryCount > 0 && (
+            <span className="text-xs text-neutral-500">{glossaryCount} терминов</span>
+          )}
+        </div>
+
+        <p className="mb-4 max-w-prose text-sm text-neutral-500">
+          С него начинается подготовка. Термины, предложенные моделью, помечены —
+          в кабине они выглядят так же уверенно, как выверенные, а верить им
+          нельзя. Правка эквивалента снимает пометку: перевод, написанный вашей
+          рукой, подтверждения не требует.
+        </p>
+
+        <GlossaryBuild
+          projectId={project.id}
+          hasDocuments={documents.some((doc) => doc.hasSource)}
+          termCount={glossaryCount}
+        />
+
+        {glossaryCount > 0 && (
+          <>
+            <details className="mt-4 rounded-lg border border-neutral-200 dark:border-neutral-800">
+              <summary className="cursor-pointer px-3 py-2 text-sm font-medium">
+                Открыть и править
+              </summary>
+              <div className="border-t border-neutral-200 p-3 dark:border-neutral-800">
+                <GlossaryEditor
+                  projectId={project.id}
+                  viewerId={user.id as number}
+                  terms={termRows}
+                  returnTo={`/projects/${project.id}`}
+                  actions={{
+                    saveTerm,
+                    confirmTerm,
+                    deleteTerm,
+                    addTerm,
+                    addVariant,
+                    removeVariant,
+                    promoteVariant,
+                  }}
+                />
+              </div>
+            </details>
+
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <a
+                href={`/api/projects/${project.id}/glossary?format=xlsx`}
+                className="rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+              >
+                Для InterpretBank (XLSX)
+              </a>
+              <a
+                href={`/api/projects/${project.id}/glossary?format=csv`}
+                className="rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+              >
+                CSV
+              </a>
+              <Link
+                href={`/projects/${project.id}/glossary`}
+                className="text-xs text-neutral-500 underline-offset-2 hover:underline"
+              >
+                Отдельной страницей
+              </Link>
+            </div>
+
+            <p className="mt-3 max-w-prose text-xs text-neutral-500">
+              При импорте в InterpretBank отметьте <b>Exclude first row</b> — в первой строке
+              названия языков, по ним он определяет колонки. Термины, предложенные моделью и
+              никем не проверенные, помечены в колонке примечаний. Запасные эквиваленты едут
+              туда же, первыми — читают в кабине по диагонали.
+            </p>
+          </>
+        )}
       </section>
 
       <section className="mb-8">
@@ -169,44 +283,6 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         >
           {hasDebrief ? "Открыть разбор" : "Заполнить разбор"}
         </Link>
-      </section>
-
-      <section className="mb-10">
-        <h2 className="mb-3 text-sm font-medium">Глоссарий</h2>
-        {glossaryCount === 0 ? (
-          <p className="text-sm text-neutral-500">Пока пуст. Заполнится при генерации скрипта.</p>
-        ) : (
-          <>
-            <p className="text-sm text-neutral-500">{glossaryCount} терминов.</p>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <Link
-                href={`/projects/${project.id}/glossary`}
-                className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-              >
-                Открыть и править
-              </Link>
-              <a
-                href={`/api/projects/${project.id}/glossary?format=xlsx`}
-                className="rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-              >
-                Для InterpretBank (XLSX)
-              </a>
-              <a
-                href={`/api/projects/${project.id}/glossary?format=csv`}
-                className="rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
-              >
-                CSV
-              </a>
-            </div>
-            <p className="mt-3 max-w-prose text-xs text-neutral-500">
-              При импорте в InterpretBank отметьте <b>Exclude first row</b> — в первой строке
-              названия языков, по ним он определяет колонки. Термины, предложенные моделью и
-              никем не проверенные, помечены в колонке примечаний: в кабине они выглядят так же
-              уверенно, как выверенные, а верить им нельзя. Запасные эквиваленты едут туда же,
-              первыми — читают в кабине по диагонали.
-            </p>
-          </>
-        )}
       </section>
 
       <div className="flex items-center justify-between border-t border-neutral-200 pt-5 dark:border-neutral-800">

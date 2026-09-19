@@ -117,3 +117,55 @@ test("термин заводится руками и сразу без поме
   await expect(page.getByText("перевод через пилот")).toBeVisible();
   await expect(page.getByText("предложен моделью")).toHaveCount(0);
 });
+
+test("на карточке проекта глоссарий стоит выше файлов", async ({ page, context }) => {
+  // I1: порядок на странице — это и есть порядок работы. Проверяем именно
+  // взаимное расположение, а не наличие заголовков: пока глоссарий стоял
+  // последним, он и читался как побочный продукт озвучки.
+  await signIn(context);
+  await page.goto(`/projects/${projectId}`);
+
+  const headings = await page.getByRole("heading", { level: 2 }).allTextContents();
+  const documents = headings.indexOf("Исходные документы");
+  const glossary = headings.indexOf("Глоссарий");
+  const files = headings.indexOf("Файлы проекта");
+
+  expect(documents).toBeGreaterThanOrEqual(0);
+  expect(glossary).toBeGreaterThan(documents);
+  expect(files).toBeGreaterThan(glossary);
+});
+
+test("глоссарий правится прямо на карточке проекта и там же остаётся", async ({ page, context }) => {
+  // I2: раскрыть, поправить и остаться. Раньше правка уносила на отдельную
+  // страницу — то есть со страницы, где человек работает, на другую.
+  await signIn(context);
+  await page.goto(`/projects/${projectId}`);
+
+  await page.getByText("Открыть и править").click();
+
+  const row = page.locator("li", { hasText: "civic space" }).first();
+  await row.getByRole("button", { name: "Править" }).click();
+  await row.getByLabel("Эквивалент", { exact: true }).fill("пространство гражданского участия");
+  await row.getByRole("button", { name: "Сохранить" }).click();
+
+  // Сначала дожидаемся самой правки в разметке: без этого следующий щелчок
+  // уходит в страницу, которую вот-вот заменят, и пропадает.
+  const saved = page.getByText("пространство гражданского участия");
+  await expect(saved).toBeAttached();
+
+  // Вернулись на карточку проекта, а не уехали на страницу глоссария
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}(#glossary)?$`));
+
+  // Редактор после возврата свёрнут — раскрываем и убеждаемся, что правка легла
+  await page.getByText("Открыть и править").click();
+  await expect(saved).toBeVisible();
+});
+
+test("кнопка сборки не работает без материалов и говорит почему", async ({ page, context }) => {
+  await signIn(context);
+  await page.goto(`/projects/${projectId}`);
+
+  const build = page.getByRole("button", { name: /Собрать глоссарий|Дособрать по материалам/ });
+  await expect(build).toBeDisabled();
+  await expect(page.getByText("Сначала загрузите материалы события")).toBeVisible();
+});

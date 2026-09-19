@@ -308,7 +308,7 @@ export interface Document {
 export interface Generation {
   id: number;
   project: number | Project;
-  kind: 'script' | 'audio';
+  kind: 'glossary' | 'script' | 'audio';
   params?:
     | {
         [k: string]: unknown;
@@ -489,7 +489,7 @@ export interface UsageEvent {
   id: number;
   user?: (number | null) | User;
   project?: (number | null) | Project;
-  kind: 'script' | 'audio';
+  kind: 'glossary' | 'script' | 'audio';
   chars: number;
   costUsd: number;
   tier?: string | null;
@@ -516,6 +516,7 @@ export interface Activity {
   step:
     | 'project_created'
     | 'document_uploaded'
+    | 'glossary_built'
     | 'script_generated'
     | 'audio_generated'
     | 'glossary_exported'

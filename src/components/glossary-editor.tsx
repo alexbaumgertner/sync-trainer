@@ -22,11 +22,20 @@ export default function GlossaryEditor({
   projectId,
   viewerId,
   terms,
+  returnTo,
   actions,
 }: {
   projectId: number;
   viewerId: number;
   terms: TermRow[];
+  /**
+   * Куда вернуть человека после правки (I2).
+   *
+   * Редактор живёт в двух местах: на карточке проекта и на своей странице.
+   * Без этого поля правка с карточки уносила бы на страницу глоссария —
+   * то есть со страницы, где человек работает, на другую.
+   */
+  returnTo?: string;
   actions: {
     saveTerm: Action;
     confirmTerm: Action;
@@ -43,6 +52,7 @@ export default function GlossaryEditor({
   const hidden = (termId?: number) => (
     <>
       <input type="hidden" name="projectId" value={projectId} />
+      {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
       {termId !== undefined && <input type="hidden" name="termId" value={termId} />}
     </>
   );
@@ -51,7 +61,7 @@ export default function GlossaryEditor({
     <div className="grid gap-3">
       {terms.length === 0 && (
         <p className="text-sm text-neutral-500">
-          Глоссарий пуст. Он заполнится при генерации скрипта — или заведите термин руками.
+          Глоссарий пуст. Соберите его по материалам события — или заведите термин руками.
         </p>
       )}
 

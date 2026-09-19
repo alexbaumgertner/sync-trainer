@@ -476,6 +476,7 @@ export const Generations: CollectionConfig = {
       type: "select",
       required: true,
       options: [
+        { label: "Глоссарий", value: "glossary" },
         { label: "Скрипт", value: "script" },
         { label: "Аудио", value: "audio" },
       ],
@@ -698,6 +699,7 @@ export const UsageEvents: CollectionConfig = {
       type: "select",
       required: true,
       options: [
+        { label: "Глоссарий", value: "glossary" },
         { label: "Скрипт", value: "script" },
         { label: "Аудио", value: "audio" },
       ],

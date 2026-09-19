@@ -59,9 +59,27 @@ async function load(formData: FormData): Promise<Loaded> {
   return { payload, userId: user.id as number, projectId, term };
 }
 
-const back = (projectId: number): never => {
-  revalidatePath(`/projects/${projectId}/glossary`);
-  redirect(`/projects/${projectId}/glossary`);
+/**
+ * Куда вернуться после правки.
+ *
+ * Редактор открывается и на карточке проекта, и на отдельной странице (I2),
+ * поэтому адрес возврата приходит из формы. Принимаем только пути внутри
+ * этого проекта: поле пришло из браузера, и без проверки оно стало бы
+ * открытым перенаправлением — уводило бы с нашего адреса на чужой.
+ */
+const back = (projectId: number, formData?: FormData): never => {
+  const own = `/projects/${projectId}`;
+  const asked = String(formData?.get("returnTo") ?? "");
+  const target = asked === own || asked === `${own}/glossary` ? asked : `${own}/glossary`;
+
+  revalidatePath(target);
+  // Якорь — чтобы вернуться к глоссарию, а не к началу карточки проекта:
+  // на ней он теперь третьей секцией, и без якоря человек после каждой
+  // правки оказывался бы в шапке.
+  // Якорь — чтобы вернуться к глоссарию, а не к началу карточки проекта:
+  // на ней он теперь третьей секцией, и без якоря человек после каждой
+  // правки оказывался бы в шапке.
+  redirect(target === own ? `${own}#glossary` : target);
 };
 
 const text = (formData: FormData, key: string): string | null =>
@@ -71,7 +89,7 @@ export async function saveTerm(formData: FormData): Promise<void> {
   const { payload, userId, projectId, term } = await load(formData);
 
   const source = text(formData, "source");
-  if (!source) return back(projectId);
+  if (!source) return back(projectId, formData);
 
   const nextTarget = text(formData, "target");
   const previousTarget = term.targetTerm?.trim() || null;
@@ -91,7 +109,7 @@ export async function saveTerm(formData: FormData): Promise<void> {
     overrideAccess: true,
   });
 
-  back(projectId);
+  back(projectId, formData);
 }
 
 /**
@@ -111,20 +129,20 @@ export async function confirmTerm(formData: FormData): Promise<void> {
     overrideAccess: true,
   });
 
-  back(projectId);
+  back(projectId, formData);
 }
 
 export async function deleteTerm(formData: FormData): Promise<void> {
   const { payload, projectId, term } = await load(formData);
   await payload.delete({ collection: "glossary-terms", id: term.id, overrideAccess: true });
-  back(projectId);
+  back(projectId, formData);
 }
 
 export async function addTerm(formData: FormData): Promise<void> {
   const { payload, userId, projectId } = await load(formData);
 
   const source = text(formData, "source");
-  if (!source) return back(projectId);
+  if (!source) return back(projectId, formData);
 
   await payload.create({
     collection: "glossary-terms",
@@ -143,14 +161,14 @@ export async function addTerm(formData: FormData): Promise<void> {
     overrideAccess: true,
   });
 
-  back(projectId);
+  back(projectId, formData);
 }
 
 export async function addVariant(formData: FormData): Promise<void> {
   const { payload, userId, projectId, term } = await load(formData);
 
   const variantText = text(formData, "text");
-  if (!variantText) return back(projectId);
+  if (!variantText) return back(projectId, formData);
 
   const existing = (term.variants ?? []).map((variant) => ({
     text: variant.text,
@@ -177,7 +195,7 @@ export async function addVariant(formData: FormData): Promise<void> {
     overrideAccess: true,
   });
 
-  back(projectId);
+  back(projectId, formData);
 }
 
 export async function removeVariant(formData: FormData): Promise<void> {
@@ -201,7 +219,7 @@ export async function removeVariant(formData: FormData): Promise<void> {
     overrideAccess: true,
   });
 
-  back(projectId);
+  back(projectId, formData);
 }
 
 /**
@@ -220,7 +238,7 @@ export async function promoteVariant(formData: FormData): Promise<void> {
   const variantId = String(formData.get("variantId") ?? "");
 
   const chosen = (term.variants ?? []).find((variant) => String(variant.id) === variantId);
-  if (!chosen?.text?.trim()) return back(projectId);
+  if (!chosen?.text?.trim()) return back(projectId, formData);
 
   const previousTarget = term.targetTerm?.trim() || null;
   const previousAuthor =
@@ -262,5 +280,5 @@ export async function promoteVariant(formData: FormData): Promise<void> {
     overrideAccess: true,
   });
 
-  back(projectId);
+  back(projectId, formData);
 }

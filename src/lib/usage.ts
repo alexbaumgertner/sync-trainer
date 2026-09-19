@@ -42,7 +42,7 @@ const monthStart = (): string => {
 export interface RecordArgs {
   userId: number;
   projectId?: number;
-  kind: "script" | "audio";
+  kind: "glossary" | "script" | "audio";
   chars: number;
   costUsd: number;
   tier?: string;
