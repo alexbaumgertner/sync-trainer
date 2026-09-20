@@ -397,6 +397,10 @@ export interface Artifact {
    * Карта времени в формате WebVTT
    */
   cuesVtt?: string | null;
+  /**
+   * Границы фраз притянуты к паузам в звуке
+   */
+  cuesAligned?: boolean | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -889,6 +893,7 @@ export interface ArtifactsSelect<T extends boolean = true> {
   peaks?: T;
   durationSec?: T;
   cuesVtt?: T;
+  cuesAligned?: T;
   updatedAt?: T;
   createdAt?: T;
 }

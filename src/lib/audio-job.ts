@@ -5,6 +5,7 @@ import { synthesizePlan, explainError } from "@/lib/google-tts";
 import { artifactPath, putArtifact } from "@/lib/artifacts";
 import { recordStep } from "@/lib/activity";
 import { buildCues, toVtt } from "@/lib/cues";
+import { findPauses } from "@/lib/pauses";
 import { ssmlToSpoken } from "@/lib/ssml";
 import { withId3, SYNTHETIC_NOTICE } from "@/lib/id3";
 import { recordUsage } from "@/lib/usage";
@@ -56,6 +57,17 @@ export async function runAudioJob(job: AudioJob): Promise<void> {
      * приблизительно — по длине текста. Поэтому точная карта существует
      * у озвучек, сделанных начиная с этой правки.
      */
+    /**
+     * Паузы берём из самого звука: границы фраз ставятся туда, где человек
+     * слышит остановку, а не туда, где их предсказала длина текста. Отказ
+     * здесь не повод срывать синтез — без пауз карта будет прежней,
+     * приблизительной внутри реплики.
+     */
+    const pauses = await findPauses(audio).catch((error: unknown) => {
+      console.error("[audio] не удалось разобрать паузы", error);
+      return [] as Awaited<ReturnType<typeof findPauses>>;
+    });
+
     const cuesVtt = toVtt(
       buildCues(
         job.plan.map((item, index) =>
@@ -70,6 +82,7 @@ export async function runAudioJob(job: AudioJob): Promise<void> {
                 seconds: itemSeconds[index] ?? 0,
               },
         ),
+        pauses,
       ),
     );
 
@@ -101,6 +114,8 @@ export async function runAudioJob(job: AudioJob): Promise<void> {
         bytes,
         // Карта времени ложится вместе с файлом: снять её потом негде.
         cuesVtt,
+        // Паузы нашлись — границы фраз уже притянуты, пересчитывать нечего.
+        cuesAligned: pauses.length > 0,
         durationSec: itemSeconds.reduce((sum, seconds) => sum + seconds, 0),
       },
       overrideAccess: true,

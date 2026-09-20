@@ -3,7 +3,7 @@ import { currentUser } from "@/lib/auth";
 import { payloadClient } from "@/lib/payload";
 import { readArtifact } from "@/lib/artifacts";
 import { insideProject } from "@/lib/artifact-path";
-import { buildCues, estimateDurations, toVtt, type TimedItem } from "@/lib/cues";
+import { buildCues, estimateDurations, realignVtt, toVtt, type TimedItem } from "@/lib/cues";
 import { parseScript, planSynthesis, ssmlToSpoken } from "@/lib/ssml";
 
 export const runtime = "nodejs";
@@ -18,9 +18,10 @@ export const maxDuration = 60;
  * Два источника, и разница между ними существенная:
  *
  *  1. Точная карта, снятая при синтезе. Границы реплик известны по кадрам
- *     MP3 каждого куска; внутри реплики предложения раскладываются по длине,
- *     и ошибка не накапливается — на каждой следующей реплике отсчёт
- *     начинается заново.
+ *     MP3 каждого куска, а границы фраз внутри реплики притянуты к паузам
+ *     в самом звуке. До привязки они раскладывались по длине текста, и на
+ *     реплике в минуту подсветка уходила вперёд на десяток секунд: живая
+ *     речь не идёт с постоянным числом символов в секунду.
  *  2. Приблизительная, собранная на ходу из скрипта и общей длительности.
  *     Нужна для озвучек, сделанных до появления карты. Здесь ошибка
  *     НАКАПЛИВАЕТСЯ: точных границ нет. Годится найти место и переслушать,
@@ -54,7 +55,25 @@ export async function GET(
   // Подрезаем только для проверки на пустоту: сам файл отдаём как есть,
   // чтобы он побайтово совпадал с тем, что сняли при синтезе.
   const stored = artifact.cuesVtt ?? "";
-  if (stored.trim()) return vttResponse(stored, "exact");
+  if (stored.trim()) {
+    if (artifact.cuesAligned) return vttResponse(stored, "exact");
+
+    /**
+     * Карта снята до появления привязки к паузам: фразы внутри реплики
+     * разложены по длине текста, и подсветка уходит вперёд на секунды.
+     * Пересчитываем один раз и сохраняем — платить за новый синтез ради
+     * исправления подсветки человек не должен.
+     *
+     * Отказ здесь не повод не отдать карту: прежняя хуже, но работает.
+     */
+    const realigned = await realign(payload, artifact.id, artifact.blobPath, stored).catch(
+      (error: unknown) => {
+        console.error("[cues] пересчёт не удался", error);
+        return null;
+      },
+    );
+    return vttResponse(realigned ?? stored, "exact");
+  }
 
   // Точной карты нет — собираем приблизительную из скрипта проекта.
   const estimated = await estimateFromScript(payload, Number(id), artifact.durationSec ?? null);
@@ -62,6 +81,38 @@ export async function GET(
     return NextResponse.json({ error: "Карты времени нет." }, { status: 404 });
   }
   return vttResponse(estimated, "estimated");
+}
+
+/**
+ * Пересчёт карты по паузам в звуке, один раз на озвучку.
+ *
+ * Декодировать MP3 на каждый запрос было бы расточительством, поэтому
+ * результат ложится обратно в запись вместе с отметкой.
+ */
+async function realign(
+  payload: Awaited<ReturnType<typeof payloadClient>>,
+  artifactId: number,
+  blobPath: string,
+  stored: string,
+): Promise<string | null> {
+  const audio = await readArtifact(blobPath);
+  if (!audio) return null;
+
+  const { findPauses } = await import("@/lib/pauses");
+  const pauses = await findPauses(audio);
+  if (!pauses.length) return null;
+
+  const next = realignVtt(stored, pauses);
+  if (!next) return null;
+
+  await payload.update({
+    collection: "artifacts",
+    id: artifactId,
+    data: { cuesVtt: next, cuesAligned: true },
+    overrideAccess: true,
+  });
+
+  return next;
 }
 
 const vttResponse = (vtt: string, precision: "exact" | "estimated") =>

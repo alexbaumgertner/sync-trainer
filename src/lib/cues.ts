@@ -21,6 +21,15 @@ export interface Cue {
   speaker: string | null;
 }
 
+/**
+ * Пауза, найденная в звуке. Приходит снаружи числами — модуль по-прежнему
+ * ничего не знает ни о MP3, ни о том, кто и чем его декодировал.
+ */
+export interface Pause {
+  time: number;
+  length: number;
+}
+
 export type TimedItem =
   | { kind: "speech"; text: string; speaker: string | null; seconds: number }
   | { kind: "silence"; seconds: number };
@@ -160,12 +169,17 @@ const weightOf = (text: string): number => text.replace(/\s+/g, "").length || 1;
 /**
  * Фразы с временами.
  *
- * Внутри куска время раскладывается пропорционально длине предложений.
- * Это приблизительно: числа и аббревиатуры произносятся дольше, чем весят
- * в символах. Зато ошибка не накапливается — границы кусков точны, и на
- * каждой следующей реплике отсчёт начинается заново.
+ * Границы кусков точны — они известны по кадрам MP3. Внутри куска время
+ * сначала раскладывается пропорционально длине предложений, а потом
+ * границы притягиваются к настоящим паузам в звуке, если они переданы.
+ *
+ * Зачем притягивать. Раскладка по длине держится на допущении, что речь
+ * идёт с постоянным числом символов в секунду, а она так не идёт: на
+ * настоящей озвучке между голосами разброс оказался в 1,7 раза, и на
+ * реплике в минуту подсветка убегала вперёд на десяток секунд. Пауза же
+ * в звуке — это ровно та граница, которую человек слышит.
  */
-export function buildCues(items: TimedItem[]): Cue[] {
+export function buildCues(items: TimedItem[], pauses: Pause[] = []): Cue[] {
   const cues: Cue[] = [];
   let clock = 0;
 
@@ -181,23 +195,150 @@ export function buildCues(items: TimedItem[]): Cue[] {
       continue;
     }
 
+    const from = clock;
+    const to = clock + item.seconds;
     const total = sentences.reduce((sum, sentence) => sum + weightOf(sentence), 0);
-    let offset = 0;
 
+    // Предсказание по длине: оно же — опора для выравнивания ниже.
+    const predicted: number[] = [];
+    let offset = 0;
+    for (let i = 0; i < sentences.length - 1; i++) {
+      offset += (weightOf(sentences[i]) / total) * item.seconds;
+      predicted.push(from + offset);
+    }
+
+    const bounds = [from, ...alignToPauses(predicted, pauses, from, to), to];
     sentences.forEach((sentence, index) => {
-      const share = (weightOf(sentence) / total) * item.seconds;
-      const start = clock + offset;
-      // Последнюю фразу дотягиваем до конца куска, чтобы округления
-      // не оставили щели перед точной границей следующей реплики.
-      const end = index === sentences.length - 1 ? clock + item.seconds : start + share;
-      cues.push({ start, end, text: sentence, speaker: item.speaker });
-      offset += share;
+      cues.push({
+        start: bounds[index],
+        // Фраза кончается там, где начинается следующая: разрыв между ними
+        // означал бы мгновение без подсветки, а пауза — часть той фразы,
+        // после которой человек её слышит.
+        end: bounds[index + 1],
+        text: sentence,
+        speaker: item.speaker,
+      });
     });
 
-    clock += item.seconds;
+    clock = to;
   }
 
   return cues;
+}
+
+/** Дальше этого от предсказания паузу не ищем: это уже другая фраза. */
+const SNAP_TOLERANCE_SEC = 3.5;
+
+/**
+ * Плата за отказ от привязки.
+ *
+ * Без неё выравнивание цеплялось бы за любую паузу, лишь бы ближе. С ней
+ * оно предпочитает оставить границу на предсказанном месте, если рядом
+ * нет ничего убедительного.
+ */
+const SKIP_COST = 1.2;
+
+/** Награда за длину паузы: конец предложения звучит дольше запятой. */
+const LENGTH_BONUS = 4;
+
+/** Насколько фраза может сжаться и растянуться против предсказания. */
+const MIN_SHARE = 0.55;
+const MAX_SHARE = 1.8;
+
+/**
+ * Границы фраз, притянутые к настоящим паузам в звуке.
+ *
+ * Почему не «ближайшая пауза к каждой границе» по отдельности: пауз в
+ * реплике втрое больше, чем предложений, — синтез делает их и на запятых.
+ * Жадный выбор ставил границы вразнобой и однажды переставил их местами,
+ * дав фразу отрицательной длины. Поэтому раскладка считается целиком:
+ * выбирается возрастающая последовательность пауз, у которой суммарное
+ * отклонение от предсказания наименьшее.
+ *
+ * Это динамическое программирование по (граница, кандидат). Предложений
+ * в реплике меньше двадцати, кандидатов — меньше полусотни, так что
+ * точное решение дешевле любой эвристики.
+ */
+export function alignToPauses(
+  predicted: number[],
+  pauses: Pause[],
+  from: number,
+  to: number,
+): number[] {
+  if (!predicted.length) return [];
+
+  type Candidate = { time: number; base: number; only: number };
+  const inside = pauses.filter((pause) => pause.time > from && pause.time < to);
+  const candidates: Candidate[] = [
+    ...inside.map((pause) => ({
+      time: pause.time,
+      base: -LENGTH_BONUS * Math.min(pause.length, 0.6),
+      only: -1,
+    })),
+    // Предсказанные места — тоже кандидаты, со своей платой: так «не
+    // привязывать» остаётся возможным исходом, а не аварийным.
+    ...predicted.map((time, index) => ({ time, base: SKIP_COST, only: index })),
+  ].sort((a, b) => a.time - b.time);
+
+  const edges = [from, ...predicted, to];
+  const want = (index: number): number => edges[index + 1] - edges[index];
+  const fits = (index: number, previous: number, time: number): boolean => {
+    const span = time - previous;
+    return span >= MIN_SHARE * want(index) && span <= MAX_SHARE * want(index);
+  };
+
+  const INF = Number.POSITIVE_INFINITY;
+  const cost = (index: number, j: number): number => {
+    const candidate = candidates[j];
+    if (candidate.only >= 0 && candidate.only !== index) return INF;
+    const distance = Math.abs(candidate.time - predicted[index]);
+    return distance > SNAP_TOLERANCE_SEC ? INF : distance + candidate.base;
+  };
+
+  const n = predicted.length;
+  const m = candidates.length;
+  const best: number[][] = Array.from({ length: n }, () => new Array(m).fill(INF));
+  const from_: number[][] = Array.from({ length: n }, () => new Array(m).fill(-1));
+
+  for (let j = 0; j < m; j++) {
+    const c = cost(0, j);
+    if (c < INF && fits(0, from, candidates[j].time)) best[0][j] = c;
+  }
+
+  for (let i = 1; i < n; i++) {
+    for (let j = 0; j < m; j++) {
+      const c = cost(i, j);
+      if (c === INF) continue;
+      for (let k = 0; k < j; k++) {
+        if (best[i - 1][k] === INF) continue;
+        if (!fits(i, candidates[k].time, candidates[j].time)) continue;
+        const total = best[i - 1][k] + c;
+        if (total < best[i][j]) {
+          best[i][j] = total;
+          from_[i][j] = k;
+        }
+      }
+    }
+  }
+
+  let end = -1;
+  let endCost = INF;
+  for (let j = 0; j < m; j++) {
+    if (best[n - 1][j] >= endCost) continue;
+    if (!fits(n, candidates[j].time, to)) continue;
+    endCost = best[n - 1][j];
+    end = j;
+  }
+  // Ничего согласованного не нашлось — предсказание и есть ответ.
+  if (end < 0) return predicted;
+
+  const result = new Array<number>(n);
+  let j = end;
+  for (let i = n - 1; i >= 0; i--) {
+    result[i] = candidates[j].time;
+    j = from_[i][j];
+  }
+  return result;
 }
 
 /**
@@ -273,3 +414,69 @@ export function toVtt(cues: Cue[]): string {
 
   return lines.join("\n");
 }
+
+/**
+ * Пересчёт готовой карты времени по паузам в звуке.
+ *
+ * Нужен для озвучек, сделанных до появления привязки: платить за новый
+ * синтез ради исправления подсветки человек не должен, а всё необходимое
+ * уже есть — точные границы реплик лежат в самой карте.
+ *
+ * Разбор своего же формата здесь единственный в модуле и намеренно
+ * минимальный: берём времена и текст, остальное не трогаем.
+ */
+export function realignVtt(vtt: string, pauses: Pause[]): string | null {
+  const parsed = parseVtt(vtt);
+  if (!parsed.length) return null;
+
+  // Реплики отделены друг от друга паузой: между их фразами есть зазор.
+  const chunks: Cue[][] = [];
+  let current: Cue[] = [parsed[0]];
+  for (let i = 1; i < parsed.length; i++) {
+    if (parsed[i].start - parsed[i - 1].end > 0.05) {
+      chunks.push(current);
+      current = [parsed[i]];
+    } else {
+      current.push(parsed[i]);
+    }
+  }
+  chunks.push(current);
+
+  const out: Cue[] = [];
+  for (const chunk of chunks) {
+    const from = chunk[0].start;
+    const to = chunk[chunk.length - 1].end;
+    // Границы, которые уже стоят, и есть предсказание: они посчитаны
+    // по длине текста при синтезе.
+    const predicted = chunk.slice(1).map((cue) => cue.start);
+    const bounds = [from, ...alignToPauses(predicted, pauses, from, to), to];
+    chunk.forEach((cue, index) => {
+      out.push({ ...cue, start: bounds[index], end: bounds[index + 1] });
+    });
+  }
+
+  return toVtt(out);
+}
+
+const parseVtt = (vtt: string): Cue[] => {
+  const seconds = (stampText: string): number => {
+    const parts = stampText.trim().split(":");
+    const s = parseFloat(parts.pop() ?? "0");
+    const m = parseInt(parts.pop() ?? "0", 10);
+    const h = parseInt(parts.pop() ?? "0", 10);
+    return h * 3600 + m * 60 + s;
+  };
+
+  const cues: Cue[] = [];
+  for (const block of vtt.split(/\r?\n\r?\n+/)) {
+    const lines = block.split(/\r?\n/);
+    const timing = lines.find((line) => line.includes("-->"));
+    if (!timing) continue;
+    const [left, right] = timing.split("-->");
+    const body = lines.slice(lines.indexOf(timing) + 1).join("\n").trim();
+    if (!body) continue;
+    const voice = parseVoice(body);
+    cues.push({ start: seconds(left), end: seconds(right), text: voice.text, speaker: voice.speaker });
+  }
+  return cues;
+};
