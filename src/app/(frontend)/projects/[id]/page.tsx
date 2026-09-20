@@ -11,7 +11,12 @@ import {
   STATUS_LABELS,
   STYLE_PRESET_LABELS,
 } from "@/lib/projects";
-import { deleteDocumentSource, deleteProject } from "../actions";
+import {
+  addTeamMember,
+  deleteDocumentSource,
+  deleteProject,
+  removeTeamMember,
+} from "../actions";
 import AppShell from "@/components/app-shell";
 import DangerousDelete from "@/components/dangerous-delete";
 import DocumentUpload from "@/components/document-upload";
@@ -49,7 +54,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const detail = await getProject(Number(id), user.id);
   if (!detail) notFound();
 
-  const { project, files, documents, ratings, costUsd, glossaryCount, hasDebrief } = detail;
+  const { project, files, documents, ratings, costUsd, glossaryCount, hasDebrief, team, isOwner } =
+    detail;
 
   /**
    * SSML в списке не показывается: это промежуточный формат между скриптом
@@ -95,6 +101,80 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         <Detail label="Место" value={project.eventLocation ?? "—"} />
       </dl>
 
+      {/*
+        Состав кабины (L1). Стоит выше материалов: кто идёт на событие —
+        первое, что определяется, и от этого зависит, кто будет выверять
+        глоссарий вместе с вами (K1).
+      */}
+      <section className="mb-8">
+        <h2 className="mb-3 text-sm font-medium">Состав кабины</h2>
+        {team.length === 0 ? (
+          <p className="text-sm text-neutral-500">
+            Пока никого. Названный здесь коллега с учётной записью сможет открыть
+            проект и править глоссарий вместе с вами.
+          </p>
+        ) : (
+          <ul className="divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
+            {team.map((member) => (
+              <li key={member.id} className="flex flex-wrap items-center gap-x-3 py-2">
+                <span className="font-medium">{member.name}</span>
+                {member.booth && <span className="text-xs text-neutral-500">{member.booth}</span>}
+                <span className="text-xs text-neutral-500">
+                  {member.linked ? "правит глоссарий" : "назван, без учётной записи"}
+                </span>
+                {isOwner && (
+                  <form action={removeTeamMember} className="ml-auto">
+                    <input type="hidden" name="projectId" value={project.id} />
+                    <input type="hidden" name="memberId" value={member.id} />
+                    <button
+                      type="submit"
+                      className="text-xs text-neutral-500 underline-offset-2 hover:underline"
+                    >
+                      убрать
+                    </button>
+                  </form>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {isOwner && (
+          <form action={addTeamMember} className="mt-3 flex flex-wrap items-end gap-2">
+            <input type="hidden" name="projectId" value={project.id} />
+            <label className="block text-xs">
+              <span className="mb-1 block text-neutral-500">Имя</span>
+              <input
+                name="name"
+                required
+                className="rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
+              />
+            </label>
+            <label className="block text-xs">
+              <span className="mb-1 block text-neutral-500">Почта — по ней даётся доступ</span>
+              <input
+                name="email"
+                type="email"
+                className="rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
+              />
+            </label>
+            <label className="block text-xs">
+              <span className="mb-1 block text-neutral-500">Кабина или роль</span>
+              <input
+                name="booth"
+                className="rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
+              />
+            </label>
+            <button
+              type="submit"
+              className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+            >
+              Добавить
+            </button>
+          </form>
+        )}
+      </section>
+
       <section className="mb-8">
         <h2 className="mb-3 text-sm font-medium">Исходные документы</h2>
         {documents.length > 0 && (
@@ -107,7 +187,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                 {doc.hasSource ? (
                   <>
                     <span className="ml-auto text-xs text-neutral-500">оригинал хранится</span>
-                    <form action={deleteDocumentSource}>
+                    <form action={deleteDocumentSource} className={isOwner ? "" : "hidden"}>
                       <input type="hidden" name="documentId" value={doc.id} />
                       <input type="hidden" name="projectId" value={project.id} />
                       <DangerousDelete
@@ -125,12 +205,20 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             ))}
           </ul>
         )}
-        <div className={documents.length > 0 ? "mt-4" : ""}>
-          <DocumentUpload
-            projectId={project.id}
-            clientUpload={Boolean(process.env.BLOB_READ_WRITE_TOKEN)}
-          />
-        </div>
+        {isOwner ? (
+          <div className={documents.length > 0 ? "mt-4" : ""}>
+            <DocumentUpload
+              projectId={project.id}
+              clientUpload={Boolean(process.env.BLOB_READ_WRITE_TOKEN)}
+            />
+          </div>
+        ) : (
+          documents.length === 0 && (
+            <p className="text-sm text-neutral-500">
+              Материалы загружает тот, кто завёл проект.
+            </p>
+          )
+        )}
       </section>
 
 
@@ -155,11 +243,18 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           рукой, подтверждения не требует.
         </p>
 
-        <GlossaryBuild
-          projectId={project.id}
-          hasDocuments={documents.some((doc) => doc.hasSource)}
-          termCount={glossaryCount}
-        />
+        {isOwner ? (
+          <GlossaryBuild
+            projectId={project.id}
+            hasDocuments={documents.some((doc) => doc.hasSource)}
+            termCount={glossaryCount}
+          />
+        ) : (
+          <p className="text-sm text-neutral-500">
+            Сборку запускает тот, кто завёл проект: она идёт с его счёта. Править
+            термины можно и вам.
+          </p>
+        )}
 
         {glossaryCount > 0 && (
           <>
@@ -231,12 +326,18 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           встреченные по дороге, добавятся в глоссарий как предложенные.
         </p>
 
-        <ScriptBuild
-          projectId={project.id}
-          hasDocuments={documents.some((doc) => doc.hasSource)}
-          termCount={glossaryCount}
-          hasScript={shownFiles.some((file) => file.kind === "script")}
-        />
+        {isOwner ? (
+          <ScriptBuild
+            projectId={project.id}
+            hasDocuments={documents.some((doc) => doc.hasSource)}
+            termCount={glossaryCount}
+            hasScript={shownFiles.some((file) => file.kind === "script")}
+          />
+        ) : (
+          <p className="text-sm text-neutral-500">
+            Скрипт генерирует тот, кто завёл проект.
+          </p>
+        )}
       </section>
 
       <section className="mb-8">
@@ -314,7 +415,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         <Link href="/projects" className="text-sm text-neutral-500 underline-offset-2 hover:underline">
           ← Ко всем проектам
         </Link>
-        <form action={deleteProject}>
+        <form action={deleteProject} className={isOwner ? "" : "hidden"}>
           <input type="hidden" name="id" value={project.id} />
           <DangerousDelete
             label="Удалить проект"

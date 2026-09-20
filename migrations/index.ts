@@ -27,6 +27,7 @@ import * as migration_20260917_zzz_cues from './20260917_zzz_cues';
 import * as migration_20260920_document_sources from './20260920_document_sources';
 import * as migration_20260920_zz_glossary_step from './20260920_zz_glossary_step';
 import * as migration_20260920_zzz_glossary_layers from './20260920_zzz_glossary_layers';
+import * as migration_20260921_project_team from './20260921_project_team';
 
 export const migrations = [
   {
@@ -128,5 +129,10 @@ export const migrations = [
     up: migration_20260920_zzz_glossary_layers.up,
     down: migration_20260920_zzz_glossary_layers.down,
     name: '20260920_zzz_glossary_layers',
+  },
+  {
+    up: migration_20260921_project_team.up,
+    down: migration_20260921_project_team.down,
+    name: '20260921_project_team',
   },
 ];

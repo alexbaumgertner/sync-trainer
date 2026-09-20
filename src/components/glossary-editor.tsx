@@ -185,6 +185,16 @@ export default function GlossaryEditor({
                           подтвердил: {term.verifiedByName}
                         </span>
                       )}
+                      {/*
+                        K5: правка коллеги не затирает чужую молча. Помешать
+                        перезаписи нельзя и не нужно — спорят люди, а не
+                        строки, — но видно, с кем говорить.
+                      */}
+                      {term.editedByName && (
+                        <span className="text-xs text-neutral-500">
+                          правил: {term.editedByName}
+                        </span>
+                      )}
                     </div>
                   </form>
 

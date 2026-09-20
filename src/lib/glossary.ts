@@ -42,6 +42,9 @@ export interface TermRow {
   occurredAtEvent: boolean;
   verifiedByName: string | null;
   verifiedAt: string | null;
+  /** K5: кто правил последним и когда */
+  editedByName: string | null;
+  editedAt: string | null;
   variants: TermVariant[];
 }
 
@@ -74,6 +77,8 @@ export function toTermRow(doc: GlossaryTerm): TermRow {
     occurredAtEvent: Boolean(doc.occurredAtEvent),
     verifiedByName: nameOf(doc.verifiedBy),
     verifiedAt: doc.verifiedAt ?? null,
+    editedByName: nameOf(doc.editedBy),
+    editedAt: doc.updatedAt ?? null,
     variants: (doc.variants ?? [])
       .filter((variant) => variant.text?.trim())
       .map((variant) => ({

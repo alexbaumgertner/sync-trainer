@@ -117,3 +117,82 @@ export async function deleteDocumentSource(formData: FormData): Promise<void> {
 
   revalidatePath(`/projects/${projectId}`);
 }
+
+/**
+ * Состав кабины: кто идёт на это событие (L1, K1).
+ *
+ * Связь с учётной записью появляется, когда адрес совпал. Не совпал —
+ * имя остаётся текстом: состав пишут сразу, не дожидаясь, пока коллеги
+ * заведутся в сервисе. Дорастить связь можно потом, добавив человека
+ * заново с тем же адресом.
+ */
+export async function addTeamMember(formData: FormData): Promise<void> {
+  const user = await currentUser();
+  if (!user) redirect("/");
+
+  const projectId = Number(formData.get("projectId"));
+  const name = String(formData.get("name") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const booth = String(formData.get("booth") ?? "").trim();
+  if (!Number.isInteger(projectId) || !name) redirect(`/projects/${projectId}`);
+
+  const payload = await payloadClient();
+  const project = await payload
+    .findByID({ collection: "projects", id: projectId, depth: 0, overrideAccess: true })
+    .catch(() => null);
+  // Состав правит только владелец: доступ к глоссарию раздаёт он, и
+  // раздавать его за него нельзя.
+  const ownerId = typeof project?.owner === "object" ? project.owner?.id : project?.owner;
+  if (!project || ownerId !== user.id) redirect("/projects");
+
+  let linked: number | undefined;
+  if (email) {
+    const found = await payload.find({
+      collection: "users",
+      where: { email: { equals: email } },
+      limit: 1,
+      depth: 0,
+      overrideAccess: true,
+    });
+    linked = found.docs[0]?.id;
+  }
+
+  await payload.update({
+    collection: "projects",
+    id: projectId,
+    data: {
+      team: [
+        ...(project.team ?? []),
+        { name, email: email || undefined, user: linked, booth: booth || undefined },
+      ],
+    },
+    overrideAccess: true,
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+}
+
+export async function removeTeamMember(formData: FormData): Promise<void> {
+  const user = await currentUser();
+  if (!user) redirect("/");
+
+  const projectId = Number(formData.get("projectId"));
+  const memberId = String(formData.get("memberId") ?? "");
+  if (!Number.isInteger(projectId) || !memberId) redirect(`/projects/${projectId}`);
+
+  const payload = await payloadClient();
+  const project = await payload
+    .findByID({ collection: "projects", id: projectId, depth: 0, overrideAccess: true })
+    .catch(() => null);
+  const ownerId = typeof project?.owner === "object" ? project.owner?.id : project?.owner;
+  if (!project || ownerId !== user.id) redirect("/projects");
+
+  await payload.update({
+    collection: "projects",
+    id: projectId,
+    data: { team: (project.team ?? []).filter((member) => String(member.id) !== memberId) },
+    overrideAccess: true,
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+}

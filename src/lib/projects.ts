@@ -51,7 +51,12 @@ export async function listProjects(userId: number): Promise<ProjectRow[]> {
 
   const projects = await payload.find({
     collection: "projects",
-    where: { owner: { equals: userId } },
+    // K1: свои проекты и те, куда позвали в кабину. Без второго условия
+    // коллега мог бы попасть в проект только по прямой ссылке — то есть
+    // никак, если её не прислали.
+    where: {
+      or: [{ owner: { equals: userId } }, { "team.user": { equals: userId } }],
+    },
     sort: "-createdAt",
     limit: 200,
     depth: 0,
@@ -154,6 +159,19 @@ export interface ProjectDetail {
   glossaryCount: number;
   /** E1–E3: заполнен ли разбор — от этого зависит подпись на карточке */
   hasDebrief: boolean;
+  /**
+   * Состав кабины (L1). Связь с учётной записью есть не у всех: имя пишут
+   * сразу, не дожидаясь, пока коллега заведётся в сервисе.
+   */
+  team: { id: string; name: string; booth: string | null; linked: boolean }[];
+  /**
+   * Владелец ли смотрящий (K1–K2).
+   *
+   * Коллега из состава видит проект и правит глоссарий, но не удаляет
+   * проект, не грузит материалы и не платит за генерации: его позвали
+   * выверять термины, а не решать судьбу чужой подготовки.
+   */
+  isOwner: boolean;
 }
 
 /** Карточка проекта. Возвращает null, если проект чужой или не существует. */
@@ -164,10 +182,17 @@ export async function getProject(id: number, userId: number): Promise<ProjectDet
     .findByID({ collection: "projects", id, depth: 0, overrideAccess: true })
     .catch(() => null);
 
-  // Владение проверяем здесь, потому что читаем с overrideAccess ради
+  // Доступ проверяем здесь, потому что читаем с overrideAccess ради
   // связанных коллекций; сравнение явное и в одном месте.
   const ownerId = typeof project?.owner === "object" ? project.owner?.id : project?.owner;
-  if (!project || ownerId !== userId) return null;
+  const isOwner = ownerId === userId;
+  // K1: коллега из состава тоже видит проект — ради общей выверки глоссария.
+  // Названный текстом не подходит: у него нет учётной записи, и связи нет.
+  const inTeam = (project?.team ?? []).some((member) => {
+    const id = typeof member.user === "object" ? member.user?.id : member.user;
+    return id === userId;
+  });
+  if (!project || (!isOwner && !inTeam)) return null;
 
   const [artifacts, documents, usage, glossary, debriefs, ratings] = await Promise.all([
     payload.find({
@@ -239,5 +264,12 @@ export async function getProject(id: number, userId: number): Promise<ProjectDet
     costUsd: usage.docs.reduce((sum, row) => sum + (row.costUsd ?? 0), 0),
     glossaryCount: glossary.totalDocs,
     hasDebrief: debriefs.totalDocs > 0,
+    isOwner,
+    team: (project.team ?? []).map((member) => ({
+      id: String(member.id),
+      name: member.name,
+      booth: member.booth?.trim() || null,
+      linked: Boolean(member.user),
+    })),
   };
 }

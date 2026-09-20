@@ -271,6 +271,27 @@ export interface Project {
   targetLang: 'ru' | 'en';
   stylePreset: 'un' | 'court' | 'eu' | 'corporate';
   status: 'draft' | 'scripted' | 'ready' | 'held';
+  /**
+   * L1: кто идёт в кабину на это событие
+   */
+  team?:
+    | {
+        name: string;
+        /**
+         * По нему связываем с учётной записью
+         */
+        email?: string | null;
+        /**
+         * Связь появляется, когда адрес совпал
+         */
+        user?: (number | null) | User;
+        /**
+         * Кабина или роль
+         */
+        booth?: string | null;
+        id?: string | null;
+      }[]
+    | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -383,6 +404,10 @@ export interface GlossaryTerm {
   status: 'suggested' | 'verified' | 'from-practice';
   proposedBy?: (number | null) | User;
   verifiedBy?: (number | null) | User;
+  /**
+   * K5: кто правил последним
+   */
+  editedBy?: (number | null) | User;
   verifiedAt?: string | null;
   /**
    * Запасные эквиваленты: кто предложил и почему
@@ -773,6 +798,15 @@ export interface ProjectsSelect<T extends boolean = true> {
   targetLang?: T;
   stylePreset?: T;
   status?: T;
+  team?:
+    | T
+    | {
+        name?: T;
+        email?: T;
+        user?: T;
+        booth?: T;
+        id?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
 }
@@ -841,6 +875,7 @@ export interface GlossaryTermsSelect<T extends boolean = true> {
   status?: T;
   proposedBy?: T;
   verifiedBy?: T;
+  editedBy?: T;
   verifiedAt?: T;
   variants?:
     | T

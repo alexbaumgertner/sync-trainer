@@ -7,10 +7,12 @@ import {
   glossaryReadable,
   glossaryWritable,
   isAdmin,
+  projectVisible,
   ownedBy,
   ownedByProject,
   ownUsage,
   withinOwnProject,
+  withinTeamProject,
 } from "@/lib/access";
 import { otpCookieStrategy } from "@/lib/payload-strategy";
 import {
@@ -258,7 +260,10 @@ export const Projects: CollectionConfig = {
   slug: "projects",
   admin: { useAsTitle: "title", defaultColumns: ["title", "eventName", "sourceLang", "status"] },
   access: {
-    read: ownedBy("owner"),
+    // Читать — владельцу и названной команде (K1). Менять и удалять —
+    // только владельцу: коллегу позвали выверять термины, а не решать
+    // судьбу чужой подготовки.
+    read: projectVisible,
     update: ownedBy("owner"),
     delete: ownedBy("owner"),
     create: authenticated,
@@ -407,6 +412,39 @@ export const Projects: CollectionConfig = {
         { label: "Скрипт готов", value: "scripted" },
         { label: "Аудио готово", value: "ready" },
         { label: "Событие прошло", value: "held" },
+      ],
+    },
+    {
+      /**
+       * Состав кабины: кто идёт переводить это событие (L1, K1).
+       *
+       * У записи о прошедшем событии команда уже была (W3); здесь она про
+       * будущее — и нужна не для истории, а для доступа: глоссарий проекта
+       * выверяют между собой те, кто пойдёт с ним работать.
+       *
+       * Имя — всегда, связь с учётной записью — если адрес совпал. Тот же
+       * порядок, что в записях о работе: состав пишут сразу, не дожидаясь,
+       * пока коллеги заведутся в сервисе. Правит глоссарий только связанный
+       * (K2) — названному текстом править нечем, у него нет входа.
+       */
+      name: "team",
+      type: "array",
+      admin: { description: "L1: кто идёт в кабину на это событие" },
+      fields: [
+        { name: "name", type: "text", required: true },
+        {
+          name: "email",
+          type: "email",
+          admin: { description: "По нему связываем с учётной записью" },
+        },
+        {
+          name: "user",
+          type: "relationship",
+          relationTo: "users",
+          index: true,
+          admin: { description: "Связь появляется, когда адрес совпал" },
+        },
+        { name: "booth", type: "text", admin: { description: "Кабина или роль" } },
       ],
     },
   ],
@@ -599,7 +637,7 @@ export const GlossaryTerms: CollectionConfig = {
     // не видит. Слой и владельца проверяет `glossaryLayerAllowed` ниже.
     create: authenticated,
   },
-  hooks: { beforeChange: [withinOwnProject, glossaryLayerAllowed] },
+  hooks: { beforeChange: [withinTeamProject, glossaryLayerAllowed] },
   fields: [
     {
       /**
@@ -664,6 +702,19 @@ export const GlossaryTerms: CollectionConfig = {
     },
     { name: "proposedBy", type: "relationship", relationTo: "users" },
     { name: "verifiedBy", type: "relationship", relationTo: "users" },
+    {
+      /**
+       * K5: кто правил последним.
+       *
+       * Глоссарий теперь общий, и «эквивалент вдруг стал другим» — обычное
+       * дело. Подпись не мешает перезаписи (её и не надо мешать: спорят
+       * люди, а не строки), но делает её видимой: понятно, с кем говорить.
+       */
+      name: "editedBy",
+      type: "relationship",
+      relationTo: "users",
+      admin: { description: "K5: кто правил последним" },
+    },
     { name: "verifiedAt", type: "date" },
     {
       /**

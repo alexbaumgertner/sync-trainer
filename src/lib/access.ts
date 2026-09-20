@@ -36,6 +36,21 @@ export const ownedByProject: Access = ({ req: { user } }) => {
   return { "project.owner": { equals: user.id } } as Where;
 };
 
+/**
+ * Проект виден владельцу и названной команде (K1).
+ *
+ * Связь через массив: Payload умеет фильтровать по пути внутрь него.
+ * Названный текстом, без учётной записи, не подходит ни под одно условие —
+ * и это правильно: у него нет входа, подставлять его некуда.
+ */
+export const projectVisible: Access = ({ req: { user } }) => {
+  if (!user) return false;
+  if (isAdmin(user as User)) return true;
+  return {
+    or: [{ owner: { equals: user.id } }, { "team.user": { equals: user.id } }],
+  } as Where;
+};
+
 /** Только администратор. Для служебных коллекций. */
 export const adminOnly: Access = ({ req: { user } }) => isAdmin(user as User);
 
@@ -67,39 +82,58 @@ export const ownUsage: Access = ({ req: { user } }) => {
  * до вызова. Пользователь в `req` появляется только на путях, где за запросом
  * стоит человек, — REST, GraphQL, админка, — и именно там проверка нужна.
  */
-export const withinOwnProject: CollectionBeforeChangeHook = async ({
-  data,
-  req,
-  originalDoc,
-}) => {
-  const user = req.user as User;
-  if (!user || isAdmin(user)) return data;
+const idOf = (value: unknown): number | null => {
+  if (typeof value === "number") return value;
+  if (typeof value === "string" && /^\d+$/.test(value)) return Number(value);
+  if (value && typeof value === "object" && "id" in value) {
+    return idOf((value as { id: unknown }).id);
+  }
+  return null;
+};
 
-  const idOf = (value: unknown): number | null => {
-    if (typeof value === "number") return value;
-    if (typeof value === "string" && /^\d+$/.test(value)) return Number(value);
-    if (value && typeof value === "object" && "id" in value) {
-      return idOf((value as { id: unknown }).id);
+/** Общее тело двух хуков ниже: разница только в том, кого считать своим. */
+const projectGuard =
+  (allowTeam: boolean): CollectionBeforeChangeHook =>
+  async ({ data, req, originalDoc }) => {
+    const user = req.user as User;
+    if (!user || isAdmin(user)) return data;
+
+    // На частичной правке проекта в данных нет — строку уже отобрал доступ.
+    const target = idOf(data?.project) ?? idOf(originalDoc?.project);
+    if (target === null) return data;
+
+    const project = await req.payload
+      .findByID({ collection: "projects", id: target, depth: 0, overrideAccess: true })
+      .catch(() => null);
+
+    const mine = project && idOf(project.owner) === idOf(user.id);
+    const inTeam =
+      allowTeam &&
+      Boolean(
+        (project?.team as { user?: unknown }[] | undefined)?.some(
+          (member) => idOf(member.user) === idOf(user.id),
+        ),
+      );
+
+    if (!project || (!mine && !inTeam)) {
+      // Тот же текст, что у несуществующего проекта: подтверждать существование
+      // чужого проекта незачем — это перебором превратилось бы в список чужих.
+      throw new APIError("Проект не найден.", 404);
     }
-    return null;
+
+    return data;
   };
 
-  // На частичной правке проекта в данных нет — строку уже отобрал доступ.
-  const target = idOf(data?.project) ?? idOf(originalDoc?.project);
-  if (target === null) return data;
+export const withinOwnProject: CollectionBeforeChangeHook = projectGuard(false);
 
-  const project = await req.payload
-    .findByID({ collection: "projects", id: target, depth: 0, overrideAccess: true })
-    .catch(() => null);
-
-  if (!project || idOf(project.owner) !== idOf(user.id)) {
-    // Тот же текст, что у несуществующего проекта: подтверждать существование
-    // чужого проекта незачем — это перебором превратилось бы в список чужих.
-    throw new APIError("Проект не найден.", 404);
-  }
-
-  return data;
-};
+/**
+ * То же, но для глоссария: писать в него вправе и команда проекта (K1–K2).
+ *
+ * Отдельный хук, а не флаг на общем, потому что разрешение это узкое.
+ * Материалы, генерации и файлы остаются за владельцем: коллегу позвали
+ * выверять термины, а не тратить чужой бюджет и не удалять чужие файлы.
+ */
+export const withinTeamProject: CollectionBeforeChangeHook = projectGuard(true);
 
 /**
  * Путь файла обязан лежать в каталоге своего проекта (Б2 аудита).
@@ -149,6 +183,7 @@ export const glossaryReadable: Access = ({ req: { user } }) => {
   return {
     or: [
       { "project.owner": { equals: user.id } },
+      { "project.team.user": { equals: user.id } },
       { owner: { equals: user.id } },
       { scope: { equals: "shared" } },
     ],
@@ -168,6 +203,10 @@ export const glossaryWritable: Access = ({ req: { user } }) => {
   return {
     or: [
       { "project.owner": { equals: user.id } },
+      // K1–K2: правит и команда проекта — ради этого релиз и открывал
+      // глоссарий. Но только связанная учётной записью: у названного
+      // текстом входа нет.
+      { "project.team.user": { equals: user.id } },
       { and: [{ owner: { equals: user.id } }, { scope: { equals: "personal" } }] },
     ],
   } as Where;

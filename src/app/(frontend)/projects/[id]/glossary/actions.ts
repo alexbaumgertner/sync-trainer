@@ -40,8 +40,16 @@ async function load(formData: FormData): Promise<Loaded> {
   const project = await payload
     .findByID({ collection: "projects", id: projectId, depth: 0, overrideAccess: true })
     .catch(() => null);
+
+  // K1–K2: глоссарий правит и команда проекта, но только связанная учётной
+  // записью. Названный текстом в составе числится, а править ему нечем —
+  // входа у него нет.
   const ownerId = typeof project?.owner === "object" ? project.owner?.id : project?.owner;
-  if (!project || ownerId !== user.id) redirect("/projects");
+  const inTeam = (project?.team ?? []).some((member) => {
+    const id = typeof member.user === "object" ? member.user?.id : member.user;
+    return id === user.id;
+  });
+  if (!project || (ownerId !== user.id && !inTeam)) redirect("/projects");
 
   if (termId === null || !Number.isInteger(termId)) {
     return { payload, userId: user.id as number, projectId, term: null as never };
@@ -104,6 +112,9 @@ export async function saveTerm(formData: FormData): Promise<void> {
       targetTerm: nextTarget ?? undefined,
       note: text(formData, "note") ?? undefined,
       status,
+      // K5: глоссарий общий, и «эквивалент вдруг стал другим» — обычное
+      // дело. Подпись не мешает перезаписи, но делает её видимой.
+      editedBy: userId,
       ...(becameVerified ? { verifiedBy: userId, verifiedAt: new Date().toISOString() } : {}),
     },
     overrideAccess: true,
@@ -125,7 +136,12 @@ export async function confirmTerm(formData: FormData): Promise<void> {
   await payload.update({
     collection: "glossary-terms",
     id: term.id,
-    data: { status: "verified", verifiedBy: userId, verifiedAt: new Date().toISOString() },
+    data: {
+      status: "verified",
+      verifiedBy: userId,
+      editedBy: userId,
+      verifiedAt: new Date().toISOString(),
+    },
     overrideAccess: true,
   });
 
