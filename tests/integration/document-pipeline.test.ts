@@ -249,7 +249,9 @@ describe("полный путь документа", () => {
       where: { project: { equals: projectId } },
       overrideAccess: true,
     });
-    expect(artifacts.docs.map((a) => a.kind).sort()).toEqual(["glossary", "script", "ssml"]);
+    // Снимка глоссария среди файлов нет намеренно: он устаревал при первой
+    // же правке термина, а живая выгрузка стоит в секции глоссария.
+    expect(artifacts.docs.map((a) => a.kind).sort()).toEqual(["script", "ssml"]);
 
     const terms = await payload.count({
       collection: "glossary-terms",

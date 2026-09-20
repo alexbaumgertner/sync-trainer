@@ -216,3 +216,36 @@ test("в строке термина видно, кто его завёл и к�
   const edited = page.locator("li", { hasText: "civic space" }).first();
   await expect(edited.getByText("завёл: модель · правил: Хозяйка")).toBeVisible();
 });
+
+test("в файлах проекта нет снимка глоссария — только живая выгрузка", async ({ page, context }) => {
+  /**
+   * Найдено живым использованием: файл «Глоссарий CSV» показывал 45 строк
+   * при 77 терминах. Он был снимком на момент генерации, а выглядел как
+   * выгрузка глоссария — и человек скачивал неправду.
+   *
+   * Живая выгрузка собирается из базы на каждый запрос и устареть не может.
+   */
+  const payload = await getPayload({ config });
+  const artifact = await payload.create({
+    collection: "artifacts",
+    data: {
+      project: projectId,
+      kind: "glossary",
+      blobPath: `projects/${projectId}/glossary.csv`,
+      bytes: 128,
+    },
+    overrideAccess: true,
+  });
+
+  await signIn(context);
+  await page.goto(`/projects/${projectId}`);
+
+  const files = page.locator("section", { hasText: "Файлы проекта" });
+  await expect(files.getByText("Глоссарий CSV")).toHaveCount(0);
+
+  // А выгрузки на месте, в секции глоссария
+  await expect(page.getByRole("link", { name: "CSV" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /InterpretBank/ })).toBeVisible();
+
+  await payload.delete({ collection: "artifacts", id: artifact.id, overrideAccess: true });
+});

@@ -30,6 +30,7 @@ import ScriptEditor from "@/components/script-editor";
 import { readArtifact } from "@/lib/artifacts";
 import GlossaryEditor from "@/components/glossary-editor";
 import { payloadClient } from "@/lib/payload";
+import { latestGenerations } from "@/lib/generations";
 import { toTermRow } from "@/lib/glossary";
 import {
   addTerm,
@@ -88,12 +89,21 @@ export default async function ProjectPage({
   } = detail;
 
   /**
-   * SSML в списке не показывается: это промежуточный формат между скриптом
-   * и синтезом, а не результат, к которому возвращаются. Скачать его
-   * по-прежнему можно — маршрут файлов его отдаёт, — но место в списке
-   * он занимал наравне со скриптом и звуком и сбивал с толку.
+   * Что в списке файлов не показывается и почему.
+   *
+   * SSML — промежуточный формат между скриптом и синтезом, а не результат,
+   * к которому возвращаются.
+   *
+   * Снимок глоссария — файл, устаревавший молча: любая правка термина
+   * после генерации делала его неверным, а по виду он оставался
+   * «глоссарием проекта» (на боевом было 45 строк против 77 терминов).
+   * Новые генерации его не создают, старые остаются в базе до удаления
+   * проекта, но показывать их значит предлагать скачать неправду. Живая
+   * выгрузка — в секции глоссария, и она всегда верна.
+   *
+   * Скачать оба по-прежнему можно: маршрут файлов их отдаёт.
    */
-  const shownFiles = files.filter((file) => file.kind !== "ssml");
+  const shownFiles = files.filter((file) => file.kind !== "ssml" && file.kind !== "glossary");
 
   /**
    * Термины читаем здесь же: глоссарий теперь правится прямо на карточке
@@ -101,6 +111,18 @@ export default async function ProjectPage({
    * путём — с неё удобнее работать, когда терминов много.
    */
   const payload = await payloadClient();
+
+  /**
+   * Какую работу оценивают, говоря «глоссарий годится».
+   *
+   * Оценка привязана к генерации, а не к проекту: перегенерировали — это
+   * другой материал (см. `lib/ratings.ts`). Для глоссария такой работой
+   * стала его сборка. У проектов, собранных до разделения шагов, сборки
+   * нет, и тогда это генерация скрипта — та самая, что завела термины.
+   */
+  const running = await latestGenerations(payload, project.id);
+  const glossaryGenerationId = running.glossary?.id ?? running.script?.id ?? null;
+
   const terms = await payload.find({
     collection: "glossary-terms",
     where: { project: { equals: project.id } },
@@ -483,6 +505,16 @@ export default async function ProjectPage({
               >
                 Отдельной страницей
               </Link>
+            </div>
+
+            <div className="mt-3">
+              <ArtifactRating
+                action={saveRating}
+                projectId={project.id}
+                target="glossary"
+                generationId={glossaryGenerationId}
+                current={ratingFor(ratings, "glossary", glossaryGenerationId)}
+              />
             </div>
 
             <p className="mt-3 max-w-prose text-xs text-neutral-500">

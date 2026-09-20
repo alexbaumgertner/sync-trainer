@@ -5,7 +5,7 @@ import { artifactPath, putArtifact, readArtifact } from "@/lib/artifacts";
 import { recordStep } from "@/lib/activity";
 import { debriefNotesFor } from "@/lib/debrief-notes";
 import { extractDocument, kindOf } from "@/lib/extract";
-import { generateScript, glossaryToCsv, scriptToMarkdown } from "@/lib/script-generation";
+import { generateScript, scriptToMarkdown } from "@/lib/script-generation";
 import { geminiConfigured, explainGeminiError, NO_GEMINI_KEY } from "@/lib/gemini";
 import { presetById } from "@/presets";
 import { activeGeneration, failStaleGenerations } from "@/lib/generations";
@@ -221,10 +221,21 @@ export async function POST(
         note: term.note ?? undefined,
       }));
 
-     const files: { kind: "script" | "ssml" | "glossary"; body: string; type: string }[] = [
+      /**
+       * Снимка глоссария среди файлов больше нет.
+       *
+       * Он был файлом, который устаревал молча: любая правка термина после
+       * генерации делала его неверным, а по виду он оставался «глоссарием
+       * проекта». Замерено на боевом — 45 строк против 77 терминов.
+       * Живая выгрузка стоит в секции глоссария, знает про слои, варианты
+       * и статусы и всегда верна; второй, отстающей копии быть не должно.
+       *
+       * В самом скрипте глоссарий остаётся: там это часть материала,
+       * снятая вместе с речью, и она честно относится к своему прогону.
+       */
+      const files: { kind: "script" | "ssml"; body: string; type: string }[] = [
         { kind: "script", body: scriptToMarkdown(script, { glossary: terms }), type: "text/markdown" },
         { kind: "ssml", body: script.ssml, type: "application/ssml+xml" },
-        { kind: "glossary", body: glossaryToCsv(terms), type: "text/csv" },
       ];
 
       // Пути артефактов постоянны, и вторая генерация перезаписывает файл.
@@ -235,6 +246,8 @@ export async function POST(
         where: {
           and: [
             { project: { equals: projectId } },
+            // `glossary` в списке остаётся: старые снимки надо убрать
+            // при первой же перегенерации, иначе они переживут причину.
             { kind: { in: ["script", "ssml", "glossary"] } },
           ],
         },
@@ -248,8 +261,7 @@ export async function POST(
 
       for (const file of files) {
         if (!file.body) continue;
-        const name =
-          file.kind === "glossary" ? "glossary.csv" : file.kind === "ssml" ? "ssml.ssml" : "script.md";
+        const name = file.kind === "ssml" ? "ssml.ssml" : "script.md";
         const blobPath = artifactPath(projectId, name);
         const { bytes } = await putArtifact(blobPath, file.body, file.type);
         await payload.create({
