@@ -12,7 +12,19 @@ import { useRef, useState } from "react";
  *
  * Файл не сохраняется: он нужен ровно на время разбора.
  */
-export default function ParticipantsImport({ projectId }: { projectId: number }) {
+export default function ParticipantsImport({
+  projectId,
+  clientUpload,
+}: {
+  projectId: number;
+  /**
+   * На Vercel файл идёт в хранилище прямо из браузера: тело запроса
+   * к функции ограничено 4.5 МБ, а программа конференции в PDF весит
+   * больше. Найдено живым использованием — маршрут отвечал 413 ещё до
+   * того, как запрос доходил до кода.
+   */
+  clientUpload: boolean;
+}) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -29,12 +41,28 @@ export default function ParticipantsImport({ projectId }: { projectId: number })
     setDone(null);
 
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const response = await fetch(`/api/projects/${projectId}/participants`, {
-        method: "POST",
-        body: form,
-      });
+      let response: Response;
+
+      if (clientUpload) {
+        const { upload } = await import("@vercel/blob/client");
+        const blob = await upload(`uploads/${projectId}/${file.name}`, file, {
+          access: "private",
+          handleUploadUrl: `/api/projects/${projectId}/documents/upload-token`,
+          contentType: file.type || undefined,
+        });
+        response = await fetch(`/api/projects/${projectId}/participants`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pathname: blob.pathname, filename: file.name }),
+        });
+      } else {
+        const form = new FormData();
+        form.append("file", file);
+        response = await fetch(`/api/projects/${projectId}/participants`, {
+          method: "POST",
+          body: form,
+        });
+      }
 
       if (!response.ok) {
         const data = (await response.json().catch(() => ({}))) as { error?: string };

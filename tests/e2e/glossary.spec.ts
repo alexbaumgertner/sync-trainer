@@ -155,10 +155,10 @@ test("глоссарий правится прямо на карточке пр�
   await expect(saved).toBeAttached();
 
   // Вернулись на карточку проекта, а не уехали на страницу глоссария
-  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}(#glossary)?$`));
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}\\?glossary=open`));
 
-  // Редактор после возврата свёрнут — раскрываем и убеждаемся, что правка легла
-  await page.getByText("Открыть и править").click();
+  // И список остался раскрытым: закрывать его после каждой правки значит
+  // заставлять человека каждый раз искать место заново.
   await expect(saved).toBeVisible();
 });
 
@@ -196,4 +196,23 @@ test("чужой лист для кабины не открывается", asyn
   await signIn(context);
   const response = await page.goto(`/projects/999999/glossary/print`);
   expect(response?.status()).toBe(404);
+});
+
+
+test("в строке термина видно, кто его завёл и кто правил", async ({ page, context }) => {
+  // K3: с общим глоссарием это первое, что спрашивают. Раньше авторство
+  // было видно только в раскрытой карточке, то есть на практике не видно.
+  await signIn(context);
+  await page.goto(`/projects/${projectId}?glossary=open`);
+
+  const row = page.locator("li", { hasText: "civic space" }).first();
+  // Термин завела модель — так и подписано, а не пустым местом
+  await expect(row.getByText(/завёл: (модель|Хозяйка)/)).toBeVisible();
+
+  await row.getByRole("button", { name: "Править" }).click();
+  await row.getByLabel("Эквивалент", { exact: true }).fill("гражданское поле");
+  await row.getByRole("button", { name: "Сохранить" }).click();
+
+  const edited = page.locator("li", { hasText: "civic space" }).first();
+  await expect(edited.getByText("завёл: модель · правил: Хозяйка")).toBeVisible();
 });

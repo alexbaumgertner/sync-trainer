@@ -113,7 +113,9 @@ test("параметры генерации и обещание о хранен�
   await expect(page.getByLabel("Минут")).toHaveValue("20");
   await expect(page.getByLabel("Спикеров")).toHaveValue("5");
   await expect(page.getByLabel("Терминов")).toHaveValue("40");
-  await expect(page.getByLabel("Темп")).toHaveValue("105%");
+  // 100%, а не 105%: ускорение по умолчанию человек получал молча,
+  // не трогая поле.
+  await expect(page.getByLabel("Темп")).toHaveValue("100%");
   await expect(page.getByLabel("Перечисление на компрессию")).toBeChecked();
 });
 

@@ -190,11 +190,22 @@ describe("выгрузки", () => {
   });
 
   it("CSV экранирует кавычки", () => {
-    const csv = glossaryToCsv({
-      ...goodScript(1),
-      glossary: [{ source: 'the "gap"', target: "разрыв", note: "" }],
-    });
+    const csv = glossaryToCsv([{ source: 'the "gap"', target: "разрыв", note: "" }]);
     expect(csv.split("\n")[0]).toBe("source,target,note");
     expect(csv).toContain('"the ""gap"""');
+  });
+
+  it("в файлы идёт глоссарий проекта, а не ответ модели", () => {
+    // Найдено живым прогоном: с разделением шагов модель возвращает только
+    // НОВЫЕ термины, и в скрипте оказывалась горстка случайных вместо
+    // глоссария, который человек готовил. Файл обязан показывать его.
+    const script = goodScript(1);
+    const md = scriptToMarkdown(script, {
+      glossary: [{ source: "framework agreement", target: "рамочное соглашение" }],
+    });
+
+    expect(md).toContain("рамочное соглашение");
+    // Ответ модели в файл не попадает
+    expect(md).not.toContain(script.glossary[0].source);
   });
 });

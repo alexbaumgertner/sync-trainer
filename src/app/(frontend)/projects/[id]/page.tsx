@@ -50,11 +50,25 @@ const formatBytes = (bytes: number | null): string =>
 const formatDate = (value: string | null): string =>
   value ? new Date(value).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" }) : "—";
 
-export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProjectPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const user = await currentUser();
   if (!user) redirect("/");
 
   const { id } = await params;
+  /**
+   * Раскрыт ли редактор глоссария.
+   *
+   * `<details>` — состояние разметки, и переход его сбрасывает: после
+   * каждой правки список захлопывался, и место приходилось искать заново.
+   * Поэтому действия глоссария возвращают сюда с этим параметром.
+   */
+  const glossaryOpen = (await searchParams).glossary === "open";
   const detail = await getProject(Number(id), user.id);
   if (!detail) notFound();
 
@@ -270,7 +284,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
         {isOwner && (
           <div className="flex flex-col gap-3">
-            <ParticipantsImport projectId={project.id} />
+            <ParticipantsImport
+              projectId={project.id}
+              clientUpload={Boolean(process.env.BLOB_READ_WRITE_TOKEN)}
+            />
 
             <form action={addParticipant} className="flex flex-wrap items-end gap-2">
               <input type="hidden" name="projectId" value={project.id} />
@@ -396,7 +413,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
         {glossaryCount > 0 && (
           <>
-            <details className="mt-4 rounded-lg border border-neutral-200 dark:border-neutral-800">
+            <details
+              open={glossaryOpen}
+              className="mt-4 rounded-lg border border-neutral-200 dark:border-neutral-800"
+            >
               <summary className="cursor-pointer px-3 py-2 text-sm font-medium">
                 Открыть и править
               </summary>

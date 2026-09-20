@@ -47,7 +47,9 @@ export default function ScriptBuild({
   const [durationMin, setDurationMin] = useState(20);
   const [speakers, setSpeakers] = useState(5);
   const [termDensity, setTermDensity] = useState(40);
-  const [rate, setRate] = useState("105%");
+  // 100% — темп голоса как есть. Прежние 105% были ускорением по
+  // умолчанию, и человек, не трогавший поле, получал его молча.
+  const [rate, setRate] = useState("100%");
   const [traps, setTraps] = useState<string[]>(TRAPS.map((t) => t.value));
   const wasRunning = useRef(false);
 

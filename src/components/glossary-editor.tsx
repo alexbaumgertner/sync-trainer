@@ -5,6 +5,7 @@ import {
   authorLabel,
   isOverridden,
   LAYER_LABELS,
+  originLabel,
   STATUS_LABELS,
   type TermRow,
 } from "@/lib/glossary";
@@ -98,6 +99,12 @@ export default function GlossaryEditor({
                     {LAYER_LABELS[term.inheritedFrom]}
                   </span>
                 )}
+                {/*
+                  K3: кто завёл и кто правил — в самой строке. Раньше это
+                  было видно только в раскрытой карточке, то есть на
+                  практике не видно вовсе.
+                */}
+                <span className="text-[11px] text-neutral-500">{originLabel(term)}</span>
 
                 <button
                   type="button"
@@ -185,16 +192,7 @@ export default function GlossaryEditor({
                           подтвердил: {term.verifiedByName}
                         </span>
                       )}
-                      {/*
-                        K5: правка коллеги не затирает чужую молча. Помешать
-                        перезаписи нельзя и не нужно — спорят люди, а не
-                        строки, — но видно, с кем говорить.
-                      */}
-                      {term.editedByName && (
-                        <span className="text-xs text-neutral-500">
-                          правил: {term.editedByName}
-                        </span>
-                      )}
+
                     </div>
                   </form>
 

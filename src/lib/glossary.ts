@@ -45,6 +45,11 @@ export interface TermRow {
   /** K5: кто правил последним и когда */
   editedByName: string | null;
   editedAt: string | null;
+  /**
+   * Кто завёл термин. Пусто означает «модель», а не «неизвестно» — как
+   * и у вариантов: в кабине догадка модели и слово человека весят разное.
+   */
+  addedByName: string | null;
   variants: TermVariant[];
 }
 
@@ -79,6 +84,7 @@ export function toTermRow(doc: GlossaryTerm): TermRow {
     verifiedAt: doc.verifiedAt ?? null,
     editedByName: nameOf(doc.editedBy),
     editedAt: doc.updatedAt ?? null,
+    addedByName: nameOf(doc.proposedBy),
     variants: (doc.variants ?? [])
       .filter((variant) => variant.text?.trim())
       .map((variant) => ({
@@ -142,4 +148,21 @@ export const LAYER_LABELS: Record<"personal" | "shared", string> = {
 export function isOverridden(term: TermRow): boolean {
   if (!term.inheritedTarget) return false;
   return (term.target ?? "") !== term.inheritedTarget;
+}
+
+
+/**
+ * Подпись «откуда взялся термин» для строки списка (K3).
+ *
+ * До сих пор авторство было видно только у запасных вариантов и только
+ * в раскрытой строке — то есть на практике не видно. С общим глоссарием
+ * это первое, что спрашивают: кто это написал.
+ *
+ * Пустое имя означает «модель», а не «неизвестно»: в кабине её догадка и
+ * слово человека весят разное, и различать их надо без наведения мыши.
+ */
+export function originLabel(term: TermRow): string {
+  const added = term.addedByName ?? "модель";
+  if (!term.editedByName || term.editedByName === added) return `завёл: ${added}`;
+  return `завёл: ${added} · правил: ${term.editedByName}`;
 }

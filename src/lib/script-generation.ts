@@ -223,7 +223,20 @@ function inspect(script: ScriptResult, args: GenerateArgs): string[] {
 }
 
 /** Скрипт в читаемый Markdown — его и кладём в файлы проекта. */
-export function scriptToMarkdown(script: ScriptResult, synthetic = true): string {
+/**
+ * Скрипт в Markdown.
+ *
+ * Глоссарий передаётся отдельно и не берётся из ответа модели. Причина
+ * найдена живым использованием: с разделением шагов модель возвращает
+ * ТОЛЬКО новые термины (N6), и в файле оказывалась горстка случайных
+ * вместо глоссария проекта — человек решил, что видит чужой.
+ */
+export function scriptToMarkdown(
+  script: ScriptResult,
+  options: { glossary?: GlossaryItem[]; synthetic?: boolean } = {},
+): string {
+  const glossary = options.glossary ?? script.glossary;
+  const synthetic = options.synthetic ?? true;
   const lines = [`# ${script.title}`, ""];
 
   if (synthetic) {
@@ -238,9 +251,9 @@ export function scriptToMarkdown(script: ScriptResult, synthetic = true): string
     lines.push(`**${segment.speaker}** · ${segment.timecode}`, "", segment.text, "");
   }
 
-  if (script.glossary.length) {
+  if (glossary.length) {
     lines.push("## Глоссарий", "", "| Термин | Эквивалент | Замечание |", "|---|---|---|");
-    for (const item of script.glossary) {
+    for (const item of glossary) {
       lines.push(`| ${item.source} | ${item.target} | ${item.note ?? ""} |`);
     }
   }
@@ -248,11 +261,18 @@ export function scriptToMarkdown(script: ScriptResult, synthetic = true): string
   return lines.join("\n");
 }
 
-export function glossaryToCsv(script: ScriptResult): string {
+/**
+ * Выгрузка глоссария рядом со скриптом.
+ *
+ * Принимает список терминов, а не скрипт: см. оговорку у `scriptToMarkdown`.
+ * Этот файл — снимок на момент генерации; живая выгрузка со всеми слоями
+ * и вариантами живёт в `/api/projects/:id/glossary`.
+ */
+export function glossaryToCsv(items: GlossaryItem[]): string {
   const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;
   return [
     "source,target,note",
-    ...script.glossary.map((item) =>
+    ...items.map((item) =>
       [item.source, item.target, item.note ?? ""].map(escape).join(","),
     ),
   ].join("\n");

@@ -69,7 +69,7 @@ export async function POST(
     speakers: clamp(Number(raw.speakers), 2, 6, 5),
     termDensity: clamp(Number(raw.termDensity), 20, 60, 40),
     traps: Array.isArray(raw.traps) ? (raw.traps as Trap[]) : [],
-    rate: typeof raw.rate === "string" && raw.rate ? raw.rate : "105%",
+    rate: typeof raw.rate === "string" && raw.rate ? raw.rate : "100%",
   };
 
   const documents = await payload.find({
@@ -193,10 +193,38 @@ export async function POST(
       });
 
       const { script } = outcome;
-      const files: { kind: "script" | "ssml" | "glossary"; body: string; type: string }[] = [
-        { kind: "script", body: scriptToMarkdown(script), type: "text/markdown" },
+
+      /**
+       * Порядок здесь важен: сначала слить новые термины, потом собирать
+       * файлы. Иначе в скрипт и выгрузку попадёт не глоссарий проекта, а
+       * горстка новых кандидатов от модели — ровно та поломка, которую
+       * нашёл живой прогон.
+       */
+      await addNewTerms(
+        payload,
+        projectId,
+        script.glossary,
+        glossary.docs.map((term) => term.sourceTerm),
+      );
+
+      const full = await payload.find({
+        collection: "glossary-terms",
+        where: { project: { equals: projectId } },
+        sort: "sourceTerm",
+        limit: 500,
+        depth: 0,
+        overrideAccess: true,
+      });
+      const terms = full.docs.map((term) => ({
+        source: term.sourceTerm,
+        target: term.targetTerm ?? "",
+        note: term.note ?? undefined,
+      }));
+
+     const files: { kind: "script" | "ssml" | "glossary"; body: string; type: string }[] = [
+        { kind: "script", body: scriptToMarkdown(script, { glossary: terms }), type: "text/markdown" },
         { kind: "ssml", body: script.ssml, type: "application/ssml+xml" },
-        { kind: "glossary", body: glossaryToCsv(script), type: "text/csv" },
+        { kind: "glossary", body: glossaryToCsv(terms), type: "text/csv" },
       ];
 
       // Пути артефактов постоянны, и вторая генерация перезаписывает файл.
@@ -230,15 +258,6 @@ export async function POST(
           overrideAccess: true,
         });
       }
-
-      // N6–N7: модель только добавляет. Правило и его проверка живут
-      // в `lib/glossary-store.ts`.
-      await addNewTerms(
-        payload,
-        projectId,
-        script.glossary,
-        glossary.docs.map((term) => term.sourceTerm),
-      );
 
       await payload.update({
         collection: "generations",
