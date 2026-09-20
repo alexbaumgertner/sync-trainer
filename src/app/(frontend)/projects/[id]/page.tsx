@@ -26,6 +26,8 @@ import DocumentUpload from "@/components/document-upload";
 import GlossaryBuild from "@/components/glossary-build";
 import ParticipantsImport from "@/components/participants-import";
 import ScriptBuild from "@/components/script-build";
+import ScriptEditor from "@/components/script-editor";
+import { readArtifact } from "@/lib/artifacts";
 import GlossaryEditor from "@/components/glossary-editor";
 import { payloadClient } from "@/lib/payload";
 import { toTermRow } from "@/lib/glossary";
@@ -109,6 +111,22 @@ export default async function ProjectPage({
     overrideAccess: true,
   });
   const termRows = terms.docs.map(toTermRow);
+
+  /**
+   * Скрипт и разметка для озвучки прямо здесь (I7 живого прогона).
+   *
+   * Раньше за озвучкой надо было уйти на отдельную страницу, и со страницы
+   * проекта это не читалось никак. Читаем файлы только когда они есть:
+   * у проекта без скрипта лишних походов в хранилище не будет.
+   */
+  const scriptFile = files.find((file) => file.kind === "script");
+  const ssmlFile = files.find((file) => file.kind === "ssml");
+  const [scriptBody, ssmlBody] = await Promise.all([
+    scriptFile ? readArtifact(scriptFile.blobPath) : Promise.resolve(null),
+    ssmlFile ? readArtifact(ssmlFile.blobPath) : Promise.resolve(null),
+  ]);
+  const markdown = scriptBody?.toString("utf8") ?? "";
+  const ssml = ssmlBody?.toString("utf8") ?? "";
 
   return (
     <AppShell email={user.email} title={project.title}>
@@ -502,18 +520,46 @@ export default async function ProjectPage({
             Скрипт генерирует тот, кто завёл проект.
           </p>
         )}
+
+        {ssml && isOwner && (
+          <>
+            <details className="mt-4 rounded-lg border border-neutral-200 dark:border-neutral-800">
+              <summary className="cursor-pointer px-3 py-2 text-sm font-medium">
+                Открыть скрипт и озвучить
+              </summary>
+              <div className="border-t border-neutral-200 p-3 dark:border-neutral-800">
+                {/*
+                  Проигрыватель здесь не нужен: готовая озвучка стоит ниже,
+                  в файлах проекта, и со всей дорожкой и текстом. Два
+                  элемента звука на странице — это два разных места, где
+                  можно нажать «играть», и они спорят друг с другом.
+                */}
+                <ScriptEditor
+                  projectId={project.id}
+                  sourceLang={project.sourceLang}
+                  initialSsml={ssml}
+                  markdown={markdown}
+                  audioFileId={null}
+                />
+              </div>
+            </details>
+
+            <p className="mt-2 text-xs text-neutral-500">
+              Здесь же выбираются голоса и запускается синтез.{" "}
+              <Link
+                href={`/projects/${project.id}/script`}
+                className="underline-offset-2 hover:underline"
+              >
+                Отдельной страницей
+              </Link>{" "}
+              — если со скриптом работать удобнее в полный экран.
+            </p>
+          </>
+        )}
       </section>
 
       <section className="mb-8">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-medium">Файлы проекта</h2>
-          <Link
-            href={`/projects/${project.id}/script`}
-            className="rounded-md border border-neutral-300 px-2.5 py-1 text-xs hover:border-neutral-500 dark:border-neutral-700"
-          >
-            Скрипт и озвучка
-          </Link>
-        </div>
+        <h2 className="mb-3 text-sm font-medium">Файлы проекта</h2>
         {shownFiles.length === 0 ? (
           <p className="text-sm text-neutral-500">
             Здесь появятся скрипт, аудио и выгрузка глоссария — всё, к чему можно

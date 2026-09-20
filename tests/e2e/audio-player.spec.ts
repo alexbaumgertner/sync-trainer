@@ -99,7 +99,33 @@ test.beforeAll(async () => {
 
   await payload.create({
     collection: "artifacts",
-    data: { project: projectId, kind: "audio", blobPath, bytes: mp3.length, cuesVtt, durationSec: 12 },
+    data: {
+      project: projectId,
+      kind: "audio",
+      blobPath,
+      bytes: mp3.length,
+      cuesVtt,
+      // Карта положена готовой — пересчитывать её по паузам незачем,
+      // иначе первый же запрос полезет декодировать тестовый писк.
+      cuesAligned: true,
+      durationSec: 12,
+    },
+    overrideAccess: true,
+  });
+
+  // Разметка для озвучки: без неё на карточке проекта нечего открывать,
+  // а проверяется именно то, что за синтезом больше не надо никуда уходить.
+  const ssmlPath = artifactPath(projectId, "ssml.ssml");
+  const ssml =
+    '<speak><prosody rate="100%">' +
+    "<p>Moderator: Первая фраза про открытие заседания.</p>" +
+    '<break time="1.5s"/>' +
+    "<p>Speaker A: Третья фраза — отвечает другой человек.</p>" +
+    "</prosody></speak>";
+  await putArtifact(ssmlPath, ssml, "application/ssml+xml");
+  await payload.create({
+    collection: "artifacts",
+    data: { project: projectId, kind: "ssml", blobPath: ssmlPath, bytes: ssml.length },
     overrideAccess: true,
   });
 });
@@ -226,14 +252,19 @@ test.describe("текст под звуком", () => {
     await signIn(context);
     await page.goto(`/projects/${projectId}`);
 
+    // Ищем в секции файлов: с появлением редактора скрипта на той же
+    // странице имена говорящих встречаются дважды, и без области поиска
+    // проверка спотыкается о собственную соседку.
+    const files = page.locator("section", { hasText: "Файлы проекта" });
+
     // Браузер разбирает VTT сам — если разметка невалидна, не будет ни одной.
-    await expect(page.getByRole("button", { name: /Первая фраза/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Третья фраза/ })).toBeVisible();
+    await expect(files.getByRole("button", { name: /Первая фраза/ })).toBeVisible();
+    await expect(files.getByRole("button", { name: /Третья фраза/ })).toBeVisible();
 
     // Говорящий вынут из голосовой разметки и показан отдельно,
     // а не остался в тексте фразы.
-    await expect(page.getByText("Moderator", { exact: true })).toBeVisible();
-    await expect(page.getByText("Speaker A", { exact: true })).toBeVisible();
+    await expect(files.getByText("Moderator", { exact: true })).toBeVisible();
+    await expect(files.getByText("Speaker A", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: /<v / })).toHaveCount(0);
   });
 
@@ -268,4 +299,21 @@ test.describe("текст под звуком", () => {
       { timeout: 10_000 },
     );
   });
+});
+
+test("озвучка запускается со страницы проекта, без перехода", async ({ page, context }) => {
+  // Найдено живым использованием: со страницы проекта не читалось, что
+  // за озвучкой надо уйти на отдельную страницу. Теперь скрипт и голоса
+  // открываются здесь же.
+  await signIn(context);
+  await page.goto(`/projects/${projectId}`);
+
+  await page.getByText("Открыть скрипт и озвучить").click();
+
+  // Голоса и кнопка синтеза — на этой же странице
+  await expect(page.getByRole("button", { name: /Озвучить|Синтез/ })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}$`));
+
+  // И ровно один проигрыватель: два элемента звука спорили бы друг с другом
+  expect(await page.locator("audio").count()).toBe(1);
 });
