@@ -67,6 +67,7 @@ const makeTerm = async (over: Record<string, unknown> = {}) =>
     await payload.create({
       collection: "glossary-terms",
       data: {
+        scope: "project",
         project: projectId,
         sourceTerm: `term-${Math.random().toString(36).slice(2, 7)}`,
         targetTerm: "исходный перевод",
@@ -286,7 +287,7 @@ describe("границы", () => {
     const foreign = (
       await payload.create({
         collection: "glossary-terms",
-        data: { project: otherProjectId, sourceTerm: "чужой", targetTerm: "чужой перевод", status: "verified" },
+        data: { scope: "project", project: otherProjectId, sourceTerm: "чужой", targetTerm: "чужой перевод", status: "verified" },
         overrideAccess: true,
       })
     ).id as number;

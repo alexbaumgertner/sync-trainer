@@ -26,6 +26,7 @@ import * as migration_20260917_zz_waveform from './20260917_zz_waveform';
 import * as migration_20260917_zzz_cues from './20260917_zzz_cues';
 import * as migration_20260920_document_sources from './20260920_document_sources';
 import * as migration_20260920_zz_glossary_step from './20260920_zz_glossary_step';
+import * as migration_20260920_zzz_glossary_layers from './20260920_zzz_glossary_layers';
 
 export const migrations = [
   {
@@ -122,5 +123,10 @@ export const migrations = [
     up: migration_20260920_zz_glossary_step.up,
     down: migration_20260920_zz_glossary_step.down,
     name: '20260920_zz_glossary_step',
+  },
+  {
+    up: migration_20260920_zzz_glossary_layers.up,
+    down: migration_20260920_zzz_glossary_layers.down,
+    name: '20260920_zzz_glossary_layers',
   },
 ];

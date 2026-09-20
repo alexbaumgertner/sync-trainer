@@ -3,6 +3,9 @@ import {
   adminOnly,
   artifactStaysInProject,
   authenticated,
+  glossaryLayerAllowed,
+  glossaryReadable,
+  glossaryWritable,
   isAdmin,
   ownedBy,
   ownedByProject,
@@ -567,7 +570,21 @@ export const Artifacts: CollectionConfig = {
   ],
 };
 
-/** D3: происхождение термина хранится с самого начала, до появления интерфейса ревью. */
+/**
+ * Термины глоссария в трёх слоях (T1–T10).
+ *
+ * Слои по возрастанию частности: **общеприкладной** (справочник сервиса) →
+ * **личный** (память переводчика) → **проектный** (этот заказчик, это
+ * событие). Ближний перекрывает дальний.
+ *
+ * Слой определяется полем `scope`, а не наличием связи: вывести его из
+ * пустого `project` было бы можно, но тогда всякая проверка прав начиналась
+ * бы с рассуждения, а не с условия — и однажды рассуждение разошлось бы
+ * между местами.
+ *
+ * D3: происхождение термина хранится с самого начала, до появления
+ * интерфейса ревью.
+ */
 export const GlossaryTerms: CollectionConfig = {
   slug: "glossary-terms",
   admin: {
@@ -575,17 +592,63 @@ export const GlossaryTerms: CollectionConfig = {
     defaultColumns: ["sourceTerm", "targetTerm", "status", "occurredAtEvent"],
   },
   access: {
-    read: ownedByProject,
-    update: ownedByProject,
-    delete: ownedByProject,
+    read: glossaryReadable,
+    update: glossaryWritable,
+    delete: glossaryWritable,
     // Доступ на создание у Payload отвечает только «да/нет» и содержимого
-    // не видит. Владельца проекта проверяет `withinOwnProject` ниже.
+    // не видит. Слой и владельца проверяет `glossaryLayerAllowed` ниже.
     create: authenticated,
   },
-  hooks: { beforeChange: [withinOwnProject] },
+  hooks: { beforeChange: [withinOwnProject, glossaryLayerAllowed] },
   fields: [
-    { name: "project", type: "relationship", relationTo: "projects", required: true, index: true },
-    { name: "sourceTerm", type: "text", required: true },
+    {
+      /**
+       * Связь с проектом необязательна с R3: у личного и общеприкладного
+       * слоёв проекта нет. Это сокращение схемы — то самое, на котором
+       * Payload вешает неинтерактивный запуск, спрашивая подтверждение.
+       */
+      name: "project",
+      type: "relationship",
+      relationTo: "projects",
+      index: true,
+    },
+    {
+      name: "scope",
+      type: "select",
+      required: true,
+      defaultValue: "project",
+      index: true,
+      options: [
+        { label: "Проектный", value: "project" },
+        { label: "Личный", value: "personal" },
+        { label: "Общий для сервиса", value: "shared" },
+      ],
+    },
+    {
+      name: "owner",
+      type: "relationship",
+      relationTo: "users",
+      index: true,
+      admin: { description: "T1: чья это память. Заполнен у личного слоя" },
+    },
+    {
+      name: "inheritedFrom",
+      type: "select",
+      options: [
+        { label: "Из личного", value: "personal" },
+        { label: "Из общего", value: "shared" },
+      ],
+      admin: { description: "T2: из какого слоя термин подставился при сборке" },
+    },
+    {
+      name: "inheritedTarget",
+      type: "text",
+      admin: {
+        description:
+          "T3: эквивалент, как он стоит в дальнем слое. Нужен, чтобы перекрытый вариант оставался виден",
+      },
+    },
+    { name: "sourceTerm", type: "text", required: true, index: true },
     { name: "targetTerm", type: "text" },
     { name: "note", type: "textarea" },
     {

@@ -66,12 +66,12 @@ beforeAll(async () => {
 
   await payload.create({
     collection: "glossary-terms",
-    data: { project: ownProject, sourceTerm: "headroom", targetTerm: "запас капитала", status: "suggested" },
+    data: { scope: "project", project: ownProject, sourceTerm: "headroom", targetTerm: "запас капитала", status: "suggested" },
     overrideAccess: true,
   });
   await payload.create({
     collection: "glossary-terms",
-    data: { project: otherProject, sourceTerm: SECRET_TERM, targetTerm: "чужое", status: "verified" },
+    data: { scope: "project", project: otherProject, sourceTerm: SECRET_TERM, targetTerm: "чужое", status: "verified" },
     overrideAccess: true,
   });
 

@@ -130,3 +130,75 @@ export const artifactStaysInProject: CollectionBeforeChangeHook = ({ data, origi
 
   return data;
 };
+
+
+/**
+ * Глоссарий в трёх слоях: кто что видит (T1, T9).
+ *
+ * Проектный слой виден владельцу проекта, личный — своему хозяину,
+ * общеприкладной — всем вошедшим: это справочник сервиса, и прятать его
+ * не от кого.
+ *
+ * Условия собраны в один `or`, а не разложены по трём функциям, намеренно:
+ * Payload применяет ровно одну функцию на операцию, и «забыть слой» здесь
+ * можно только вместе со всей строкой.
+ */
+export const glossaryReadable: Access = ({ req: { user } }) => {
+  if (!user) return false;
+  if (isAdmin(user as User)) return true;
+  return {
+    or: [
+      { "project.owner": { equals: user.id } },
+      { owner: { equals: user.id } },
+      { scope: { equals: "shared" } },
+    ],
+  } as Where;
+};
+
+/**
+ * Кто что правит.
+ *
+ * Отличие от чтения одно, и оно принципиальное: общеприкладной слой правит
+ * только владелец сервиса (T9). Пусти сюда пользователей — и первый же
+ * случайный эквивалент уедет всем, а вычищать его будет некому.
+ */
+export const glossaryWritable: Access = ({ req: { user } }) => {
+  if (!user) return false;
+  if (isAdmin(user as User)) return true;
+  return {
+    or: [
+      { "project.owner": { equals: user.id } },
+      { and: [{ owner: { equals: user.id } }, { scope: { equals: "personal" } }] },
+    ],
+  } as Where;
+};
+
+/**
+ * Слой в данных должен быть по силам обратившемуся (T1, T9).
+ *
+ * Та же история, что у `withinOwnProject`: функция доступа на создание
+ * отвечает «да/нет» и содержимого не видит, поэтому без этого хука любой
+ * вошедший положил бы строку в общий справочник, указав `scope: "shared"`.
+ *
+ * Заодно здесь проставляется владелец личного слоя: брать его из тела
+ * запроса нельзя по той же причине, по которой владелец проекта берётся
+ * из сессии.
+ */
+export const glossaryLayerAllowed: CollectionBeforeChangeHook = ({ data, req, originalDoc }) => {
+  const user = req.user as User;
+  if (!user || isAdmin(user)) return data;
+
+  const scope = (data?.scope ?? originalDoc?.scope ?? "project") as string;
+
+  if (scope === "shared") {
+    // Тот же текст, что у чужой строки: объяснять устройство слоёв тому,
+    // кто пытается в них залезть, незачем.
+    throw new APIError("Общий справочник правит только владелец сервиса.", 403);
+  }
+
+  if (scope === "personal") {
+    return { ...data, owner: user.id };
+  }
+
+  return data;
+};

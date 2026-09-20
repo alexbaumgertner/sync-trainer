@@ -148,6 +148,7 @@ export async function addTerm(formData: FormData): Promise<void> {
     collection: "glossary-terms",
     data: {
       project: projectId,
+      scope: "project" as const,
       sourceTerm: source,
       targetTerm: text(formData, "target") ?? undefined,
       note: text(formData, "note") ?? undefined,
@@ -278,6 +279,29 @@ export async function promoteVariant(formData: FormData): Promise<void> {
         : kept,
     },
     overrideAccess: true,
+  });
+
+  back(projectId, formData);
+}
+
+
+/**
+ * Закрепить термин в личном слое (T5).
+ *
+ * Отдельное действие человека, а не автоматика при сохранении: память тем
+ * и ценна, что в неё кладут сознательно. Автоматический перенос затащил бы
+ * туда эквивалент, подошедший одному мероприятию, — и в следующем проекте
+ * он молча подставился бы как проверенный.
+ */
+export async function pinToPersonal(formData: FormData): Promise<void> {
+  const { payload, userId, projectId, term } = await load(formData);
+  if (!term) return back(projectId, formData);
+
+  const { promoteToPersonal } = await import("@/lib/glossary-store");
+  await promoteToPersonal(payload, userId, {
+    sourceTerm: term.sourceTerm,
+    targetTerm: term.targetTerm,
+    note: term.note,
   });
 
   back(projectId, formData);

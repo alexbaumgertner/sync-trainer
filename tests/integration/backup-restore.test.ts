@@ -102,6 +102,7 @@ beforeAll(async () => {
   await payload.create({
     collection: "glossary-terms",
     data: {
+      scope: "project",
       project: projectId,
       sourceTerm: "headroom",
       targetTerm: "запас капитала",

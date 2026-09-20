@@ -66,6 +66,7 @@ describe("выверенное не трогают", () => {
     const existing = await payload.create({
       collection: "glossary-terms",
       data: {
+        scope: "project",
         project: projectId,
         sourceTerm: "framework agreement",
         targetTerm: "рамочное соглашение",
@@ -97,6 +98,7 @@ describe("выверенное не трогают", () => {
     await payload.create({
       collection: "glossary-terms",
       data: {
+        scope: "project",
         project: projectId,
         sourceTerm: "civic space",
         targetTerm: "гражданское пространство",

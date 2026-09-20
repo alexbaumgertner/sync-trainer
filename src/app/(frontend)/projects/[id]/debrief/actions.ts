@@ -135,6 +135,7 @@ export async function saveDebrief(formData: FormData): Promise<void> {
       collection: "glossary-terms",
       data: {
         project: projectId,
+        scope: "project" as const,
         sourceTerm: parsed.source,
         targetTerm: parsed.target ?? undefined,
         status: "from-practice",

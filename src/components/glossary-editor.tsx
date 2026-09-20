@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { authorLabel, STATUS_LABELS, type TermRow } from "@/lib/glossary";
+import {
+  authorLabel,
+  isOverridden,
+  LAYER_LABELS,
+  STATUS_LABELS,
+  type TermRow,
+} from "@/lib/glossary";
 
 type Action = (formData: FormData) => Promise<void>;
 
@@ -44,6 +50,7 @@ export default function GlossaryEditor({
     addVariant: Action;
     removeVariant: Action;
     promoteVariant: Action;
+    pinToPersonal?: Action;
   };
 }) {
   const [openId, setOpenId] = useState<number | null>(null);
@@ -86,6 +93,11 @@ export default function GlossaryEditor({
                 {term.occurredAtEvent && (
                   <span className="text-[11px] text-neutral-500">прозвучал на событии</span>
                 )}
+                {term.inheritedFrom && (
+                  <span className="text-[11px] text-neutral-500">
+                    {LAYER_LABELS[term.inheritedFrom]}
+                  </span>
+                )}
 
                 <button
                   type="button"
@@ -96,6 +108,18 @@ export default function GlossaryEditor({
                   {open ? "Свернуть" : "Править"}
                 </button>
               </div>
+
+              {/*
+                T3: перекрытый эквивалент остаётся виден рядом с действующим.
+                Разные переводы одного термина в разных проектах — норма, а не
+                ошибка, поэтому здесь нет ни предупреждения, ни предложения
+                «исправить»: просто видно, что было в памяти.
+              */}
+              {isOverridden(term) && term.inheritedFrom && (
+                <p className="mt-1 text-xs text-neutral-500">
+                  {LAYER_LABELS[term.inheritedFrom]}: {term.inheritedTarget}
+                </p>
+              )}
 
               {term.note && !open && (
                 <p className="mt-1 text-xs text-neutral-500">{term.note}</p>
@@ -170,6 +194,15 @@ export default function GlossaryEditor({
                         {hidden(term.id)}
                         <button type="submit" className={QUIET}>
                           Перевод модели верен — подтвердить как есть
+                        </button>
+                      </form>
+                    )}
+
+                    {actions.pinToPersonal && term.target && (
+                      <form action={actions.pinToPersonal}>
+                        {hidden(term.id)}
+                        <button type="submit" className={QUIET}>
+                          Закрепить в личном словаре
                         </button>
                       </form>
                     )}

@@ -25,6 +25,7 @@ import {
   addVariant,
   confirmTerm,
   deleteTerm,
+  pinToPersonal,
   promoteVariant,
   removeVariant,
   saveTerm,
@@ -180,6 +181,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                     addVariant,
                     removeVariant,
                     promoteVariant,
+                    pinToPersonal,
                   }}
                 />
               </div>

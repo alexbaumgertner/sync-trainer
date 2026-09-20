@@ -33,6 +33,10 @@ export interface TermRow {
   id: number;
   source: string;
   target: string | null;
+  /** T2: из какого слоя термин подставился при сборке */
+  inheritedFrom: "personal" | "shared" | null;
+  /** T3: эквивалент дальнего слоя — он остаётся виден рядом с действующим */
+  inheritedTarget: string | null;
   note: string | null;
   status: TermStatus;
   occurredAtEvent: boolean;
@@ -63,6 +67,8 @@ export function toTermRow(doc: GlossaryTerm): TermRow {
     id: doc.id,
     source: doc.sourceTerm,
     target: doc.targetTerm?.trim() || null,
+    inheritedFrom: (doc.inheritedFrom as TermRow["inheritedFrom"]) ?? null,
+    inheritedTarget: doc.inheritedTarget?.trim() || null,
     note: doc.note?.trim() || null,
     status: doc.status as TermStatus,
     occurredAtEvent: Boolean(doc.occurredAtEvent),
@@ -112,4 +118,23 @@ export function statusAfterEdit(
   if (current !== "suggested") return current;
   const changed = (nextTarget ?? "") !== (previousTarget ?? "");
   return changed && nextTarget ? "verified" : current;
+}
+
+
+export const LAYER_LABELS: Record<"personal" | "shared", string> = {
+  personal: "из личного",
+  shared: "из общего",
+};
+
+/**
+ * Перекрыт ли термин проектным эквивалентом (T3–T4).
+ *
+ * Разные эквиваленты одного термина в разных проектах — нормальное
+ * состояние, а не конфликт: в суде одно, у этого заказчика другое.
+ * Поэтому здесь нет ни предупреждения, ни предложения «исправить» —
+ * только признак, по которому показать оба варианта.
+ */
+export function isOverridden(term: TermRow): boolean {
+  if (!term.inheritedTarget) return false;
+  return (term.target ?? "") !== term.inheritedTarget;
 }

@@ -90,6 +90,9 @@ export async function GET(
     variants: (term.variants ?? [])
       .map((variant) => variant.text?.trim() ?? "")
       .filter(Boolean),
+    // T8: откуда пришёл действующий эквивалент и что он перекрыл
+    inheritedFrom: (term.inheritedFrom as "personal" | "shared" | null) ?? null,
+    inheritedTarget: term.inheritedTarget ?? null,
   }));
 
   const labels: GlossaryLabels = {

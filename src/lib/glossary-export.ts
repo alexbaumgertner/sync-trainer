@@ -23,6 +23,10 @@ export interface GlossaryRow {
   status: "suggested" | "verified" | "from-practice";
   /** Запасные эквиваленты. В кабине они важнее примечания */
   variants?: string[];
+  /** T8: из какого слоя пришёл действующий эквивалент */
+  inheritedFrom?: "personal" | "shared" | null;
+  /** T8: эквивалент дальнего слоя, если проектный его перекрыл */
+  inheritedTarget?: string | null;
 }
 
 export interface GlossaryLabels {
@@ -38,6 +42,32 @@ export interface GlossaryLabels {
  * с примечанием — единственную, которую InterpretBank покажет рядом.
  */
 const UNVERIFIED = "не подтверждён";
+
+const LAYER_CSV: Record<"personal" | "shared", string> = {
+  personal: "личный словарь",
+  shared: "общий справочник",
+};
+
+/**
+ * Откуда взялся действующий эквивалент (T8).
+ *
+ * Колонка «происхождение» отвечала только за то, кто его предложил. С тремя
+ * слоями этого мало: «выверен» и «выверен, но в личном словаре стоит другое» —
+ * разные вещи, и вторую в кабине надо видеть.
+ */
+const originFor = (row: GlossaryRow): string => {
+  const parts = [STATUS_CSV[row.status]];
+
+  if (row.inheritedFrom) {
+    const layer = LAYER_CSV[row.inheritedFrom];
+    const overridden = row.inheritedTarget && (row.target ?? "") !== row.inheritedTarget;
+    parts.push(
+      overridden ? `перекрывает ${layer}: ${row.inheritedTarget}` : `из: ${layer}`,
+    );
+  }
+
+  return parts.join(" · ");
+};
 
 /**
  * Всё, что должно оказаться в единственной колонке примечаний.
@@ -87,7 +117,7 @@ export function glossaryToCsv(rows: GlossaryRow[], labels: GlossaryLabels): stri
       row.source,
       row.target ?? "",
       row.note ?? "",
-      STATUS_CSV[row.status],
+      originFor(row),
       (row.variants ?? []).join(" / "),
     ]
       .map(csvCell)

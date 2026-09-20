@@ -111,7 +111,7 @@ describe("удаление проекта", () => {
     });
     await payload.create({
       collection: "glossary-terms",
-      data: { project: id, sourceTerm: "backlash", targetTerm: "откат", status: "suggested" },
+      data: { scope: "project", project: id, sourceTerm: "backlash", targetTerm: "откат", status: "suggested" },
       overrideAccess: true,
     });
     await payload.create({

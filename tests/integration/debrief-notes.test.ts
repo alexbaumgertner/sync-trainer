@@ -129,7 +129,7 @@ describe("сбор выводов", () => {
     ] as const) {
       await payload.create({
         collection: "glossary-terms",
-        data: { project: past, sourceTerm: term, status },
+        data: { project: past, scope: "project", sourceTerm: term, status },
         overrideAccess: true,
       });
     }

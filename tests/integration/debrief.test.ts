@@ -119,7 +119,7 @@ beforeEach(async () => {
   for (const term of ["headroom", "graduation", "basis points"]) {
     await payload.create({
       collection: "glossary-terms",
-      data: { project: projectId, sourceTerm: term, targetTerm: "перевод", status: "suggested" },
+      data: { scope: "project", project: projectId, sourceTerm: term, targetTerm: "перевод", status: "suggested" },
       overrideAccess: true,
     });
   }
@@ -194,12 +194,12 @@ describe("E2 · недостающие термины", () => {
     const payloadClientRef = await payloadClient();
     await payloadClientRef.create({
       collection: "glossary-terms",
-      data: { project: projectId, sourceTerm: "relay", status: "verified", targetTerm: "эстафета" },
+      data: { scope: "project", project: projectId, sourceTerm: "relay", status: "verified", targetTerm: "эстафета" },
       overrideAccess: true,
     });
     await payloadClientRef.create({
       collection: "glossary-terms",
-      data: { project: projectId, sourceTerm: "pivot", status: "suggested" },
+      data: { scope: "project", project: projectId, sourceTerm: "pivot", status: "suggested" },
       overrideAccess: true,
     });
 
@@ -292,7 +292,7 @@ describe("чужой проект", () => {
   it("разбор не создаётся и термины не трогаются", async () => {
     await payload.create({
       collection: "glossary-terms",
-      data: { project: otherProject, sourceTerm: "чужой термин", status: "suggested" },
+      data: { scope: "project", project: otherProject, sourceTerm: "чужой термин", status: "suggested" },
       overrideAccess: true,
     });
 

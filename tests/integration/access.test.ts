@@ -48,7 +48,13 @@ beforeAll(async () => {
 
   await payload.create({
     collection: "glossary-terms",
-    data: { project: aliceProject.id, sourceTerm: "backlash", targetTerm: "откат", status: "suggested" },
+    data: {
+      project: aliceProject.id,
+      scope: "project",
+      sourceTerm: "backlash",
+      targetTerm: "откат",
+      status: "suggested",
+    },
     overrideAccess: true,
   });
 });

@@ -11,6 +11,7 @@ import {
   addVariant,
   confirmTerm,
   deleteTerm,
+  pinToPersonal,
   promoteVariant,
   removeVariant,
   saveTerm,
@@ -71,6 +72,7 @@ export default async function GlossaryPage({ params }: { params: Promise<{ id: s
           addVariant,
           removeVariant,
           promoteVariant,
+          pinToPersonal,
         }}
       />
 

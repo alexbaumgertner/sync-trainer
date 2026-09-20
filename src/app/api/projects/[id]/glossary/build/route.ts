@@ -9,7 +9,7 @@ import { geminiConfigured, explainGeminiError, NO_GEMINI_KEY } from "@/lib/gemin
 import { presetById } from "@/presets";
 import { activeGeneration, failStaleGenerations } from "@/lib/generations";
 import { runAfterResponse } from "@/lib/background";
-import { addNewTerms } from "@/lib/glossary-store";
+import { addNewTerms, inheritedLayers } from "@/lib/glossary-store";
 import { budgetBlock, readUsage, recordUsage } from "@/lib/usage";
 
 export const runtime = "nodejs";
@@ -167,11 +167,16 @@ export async function POST(
         eventName: project.eventName ?? undefined,
       });
 
+      // T2: что уже знает переводчик и что знает сервис. Ближний слой
+      // перекрывает дальний, и эквивалент оттуда сильнее догадки модели.
+      const inherit = await inheritedLayers(payload, user.id as number);
+
       const merged = await addNewTerms(
         payload,
         projectId,
         outcome.terms,
         known.map((term) => term.source),
+        inherit,
       );
       const added = merged.added;
 
@@ -187,6 +192,7 @@ export async function POST(
             documents: documents.docs.length,
             preset: preset.id,
             added,
+            inherited: merged.inherited,
             warnings: outcome.warnings,
           },
         },

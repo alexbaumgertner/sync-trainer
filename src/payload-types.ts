@@ -363,7 +363,20 @@ export interface Artifact {
  */
 export interface GlossaryTerm {
   id: number;
-  project: number | Project;
+  project?: (number | null) | Project;
+  scope: 'project' | 'personal' | 'shared';
+  /**
+   * T1: чья это память. Заполнен у личного слоя
+   */
+  owner?: (number | null) | User;
+  /**
+   * T2: из какого слоя термин подставился при сборке
+   */
+  inheritedFrom?: ('personal' | 'shared') | null;
+  /**
+   * T3: эквивалент, как он стоит в дальнем слое. Нужен, чтобы перекрытый вариант оставался виден
+   */
+  inheritedTarget?: string | null;
   sourceTerm: string;
   targetTerm?: string | null;
   note?: string | null;
@@ -818,6 +831,10 @@ export interface ArtifactsSelect<T extends boolean = true> {
  */
 export interface GlossaryTermsSelect<T extends boolean = true> {
   project?: T;
+  scope?: T;
+  owner?: T;
+  inheritedFrom?: T;
+  inheritedTarget?: T;
   sourceTerm?: T;
   targetTerm?: T;
   note?: T;
