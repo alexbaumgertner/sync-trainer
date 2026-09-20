@@ -89,6 +89,12 @@ export default async function GlossaryPage({ params }: { params: Promise<{ id: s
         >
           CSV
         </a>
+        <a
+          href={`/projects/${projectId}/glossary/print`}
+          className="rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+        >
+          Лист для кабины
+        </a>
         <Link
           href={`/projects/${projectId}`}
           className="ml-auto text-xs text-neutral-500 underline-offset-2 hover:underline"

@@ -172,3 +172,28 @@ test("кнопка сборки не работает без материало�
     page.getByText("Сначала загрузите материалы события — собирать не из чего."),
   ).toBeVisible();
 });
+
+test("лист для кабины печатается без интерфейса", async ({ page, context }) => {
+  // I7: лист наклеивают в кабине. Кнопки и навигация в бумаге — мусор,
+  // поэтому проверяем не наличие стилей, а отсутствие интерфейса.
+  await signIn(context);
+  await page.goto(`/projects/${projectId}/glossary/print`);
+
+  await expect(page.getByText("civic space")).toBeVisible();
+  // Ни шапки приложения, ни кнопок
+  await expect(page.getByRole("button")).toHaveCount(0);
+  await expect(page.getByRole("banner")).toHaveCount(0);
+
+  // Непроверенное помечено: в кабине оно выглядит так же уверенно,
+  // как выверенное, а верить ему нельзя.
+  const unverified = await page.getByText("(?)").count();
+  const footer = await page.getByText(/помечено предложенное моделью|Все термины подтверждены/).count();
+  expect(footer).toBe(1);
+  expect(unverified).toBeGreaterThanOrEqual(0);
+});
+
+test("чужой лист для кабины не открывается", async ({ page, context }) => {
+  await signIn(context);
+  const response = await page.goto(`/projects/999999/glossary/print`);
+  expect(response?.status()).toBe(404);
+});
