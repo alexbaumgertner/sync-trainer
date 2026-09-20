@@ -196,3 +196,114 @@ export async function removeTeamMember(formData: FormData): Promise<void> {
 
   revalidatePath(`/projects/${projectId}`);
 }
+
+/**
+ * Участники события: добавить, поправить произношение, убрать (L2–L3).
+ *
+ * Правка сведена к одному действию на человека: в кабине важно не то,
+ * сколько полей у карточки, а то, чтобы произношение можно было дописать
+ * за две секунды, не открывая ничего лишнего.
+ */
+export async function saveParticipant(formData: FormData): Promise<void> {
+  const user = await currentUser();
+  if (!user) redirect("/");
+
+  const projectId = Number(formData.get("projectId"));
+  const personId = String(formData.get("personId") ?? "");
+  const pronunciation = String(formData.get("pronunciation") ?? "").trim();
+  if (!Number.isInteger(projectId)) redirect("/projects");
+
+  const payload = await payloadClient();
+  const project = await payload
+    .findByID({ collection: "projects", id: projectId, depth: 0, overrideAccess: true })
+    .catch(() => null);
+  const ownerId = typeof project?.owner === "object" ? project.owner?.id : project?.owner;
+  if (!project || ownerId !== user.id) redirect("/projects");
+
+  await payload.update({
+    collection: "projects",
+    id: projectId,
+    data: {
+      participants: (project.participants ?? []).map((person) =>
+        String(person.id) === personId
+          ? {
+              ...person,
+              pronunciation: pronunciation || undefined,
+              // Написал человек — значит выяснил. Отметка о вопросе снимается
+              // сама: держать её после правки значит не верить своему же вводу.
+              pronunciationUnknown: pronunciation ? false : true,
+            }
+          : person,
+      ),
+    },
+    overrideAccess: true,
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+}
+
+export async function addParticipant(formData: FormData): Promise<void> {
+  const user = await currentUser();
+  if (!user) redirect("/");
+
+  const projectId = Number(formData.get("projectId"));
+  const name = String(formData.get("name") ?? "").trim();
+  const organization = String(formData.get("organization") ?? "").trim();
+  const pronunciation = String(formData.get("pronunciation") ?? "").trim();
+  if (!Number.isInteger(projectId) || !name) redirect(`/projects/${projectId}`);
+
+  const payload = await payloadClient();
+  const project = await payload
+    .findByID({ collection: "projects", id: projectId, depth: 0, overrideAccess: true })
+    .catch(() => null);
+  const ownerId = typeof project?.owner === "object" ? project.owner?.id : project?.owner;
+  if (!project || ownerId !== user.id) redirect("/projects");
+
+  await payload.update({
+    collection: "projects",
+    id: projectId,
+    data: {
+      participants: [
+        ...(project.participants ?? []),
+        {
+          name,
+          organization: organization || undefined,
+          pronunciation: pronunciation || undefined,
+          pronunciationUnknown: !pronunciation,
+        },
+      ],
+    },
+    overrideAccess: true,
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+}
+
+export async function removeParticipant(formData: FormData): Promise<void> {
+  const user = await currentUser();
+  if (!user) redirect("/");
+
+  const projectId = Number(formData.get("projectId"));
+  const personId = String(formData.get("personId") ?? "");
+  if (!Number.isInteger(projectId) || !personId) redirect(`/projects/${projectId}`);
+
+  const payload = await payloadClient();
+  const project = await payload
+    .findByID({ collection: "projects", id: projectId, depth: 0, overrideAccess: true })
+    .catch(() => null);
+  const ownerId = typeof project?.owner === "object" ? project.owner?.id : project?.owner;
+  if (!project || ownerId !== user.id) redirect("/projects");
+
+  await payload.update({
+    collection: "projects",
+    id: projectId,
+    data: {
+      participants: (project.participants ?? []).filter(
+        (person) => String(person.id) !== personId,
+      ),
+    },
+    overrideAccess: true,
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+}

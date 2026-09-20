@@ -12,15 +12,19 @@ import {
   STYLE_PRESET_LABELS,
 } from "@/lib/projects";
 import {
+  addParticipant,
   addTeamMember,
   deleteDocumentSource,
   deleteProject,
+  removeParticipant,
   removeTeamMember,
+  saveParticipant,
 } from "../actions";
 import AppShell from "@/components/app-shell";
 import DangerousDelete from "@/components/dangerous-delete";
 import DocumentUpload from "@/components/document-upload";
 import GlossaryBuild from "@/components/glossary-build";
+import ParticipantsImport from "@/components/participants-import";
 import ScriptBuild from "@/components/script-build";
 import GlossaryEditor from "@/components/glossary-editor";
 import { payloadClient } from "@/lib/payload";
@@ -54,8 +58,18 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const detail = await getProject(Number(id), user.id);
   if (!detail) notFound();
 
-  const { project, files, documents, ratings, costUsd, glossaryCount, hasDebrief, team, isOwner } =
-    detail;
+  const {
+    project,
+    files,
+    documents,
+    ratings,
+    costUsd,
+    glossaryCount,
+    hasDebrief,
+    team,
+    participants,
+    isOwner,
+  } = detail;
 
   /**
    * SSML в списке не показывается: это промежуточный формат между скриптом
@@ -172,6 +186,130 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               Добавить
             </button>
           </form>
+        )}
+      </section>
+
+      {/*
+        Участники события (L2–L3). Произношение стоит прямо в строке, а не
+        прячется в раскрывающейся карточке: перед событием по этому списку
+        пробегают глазами, а в кабине читают на ходу.
+      */}
+      <section className="mb-8">
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-sm font-medium">Кого переводим</h2>
+          {participants.some((person) => person.unknown) && (
+            <span className="text-xs text-amber-700 dark:text-amber-400">
+              произношение не выяснено: {participants.filter((p) => p.unknown).length}
+            </span>
+          )}
+        </div>
+
+        {participants.length === 0 ? (
+          <p className="mb-3 max-w-prose text-sm text-neutral-500">
+            Пока пусто. Имя, которое придётся произнести вслух, лучше выяснить
+            заранее — в кабине угадывать некогда.
+          </p>
+        ) : (
+          <ul className="mb-3 divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
+            {participants.map((person) => (
+              <li key={person.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+                <span className="font-medium">{person.name}</span>
+                {person.organization && (
+                  <span className="text-xs text-neutral-500">{person.organization}</span>
+                )}
+                {person.note && <span className="text-xs text-neutral-500">{person.note}</span>}
+
+                {isOwner ? (
+                  <form action={saveParticipant} className="ml-auto flex items-center gap-2">
+                    <input type="hidden" name="projectId" value={project.id} />
+                    <input type="hidden" name="personId" value={person.id} />
+                    <input
+                      name="pronunciation"
+                      defaultValue={person.pronunciation ?? ""}
+                      placeholder={person.unknown ? "произношение не выяснено" : "произношение"}
+                      aria-label={`Произношение: ${person.name}`}
+                      className={`w-56 rounded-md border bg-transparent px-2 py-1 text-sm ${
+                        person.unknown
+                          ? "border-amber-400 dark:border-amber-700"
+                          : "border-neutral-300 dark:border-neutral-700"
+                      }`}
+                    />
+                    <button
+                      type="submit"
+                      className="text-xs text-neutral-500 underline-offset-2 hover:underline"
+                    >
+                      сохранить
+                    </button>
+                  </form>
+                ) : (
+                  <span className="ml-auto text-sm">
+                    {person.pronunciation ?? (
+                      <span className="text-amber-700 dark:text-amber-400">
+                        произношение не выяснено
+                      </span>
+                    )}
+                  </span>
+                )}
+
+                {isOwner && (
+                  <form action={removeParticipant}>
+                    <input type="hidden" name="projectId" value={project.id} />
+                    <input type="hidden" name="personId" value={person.id} />
+                    <button
+                      type="submit"
+                      className="text-xs text-neutral-500 underline-offset-2 hover:underline"
+                    >
+                      убрать
+                    </button>
+                  </form>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {isOwner && (
+          <div className="flex flex-col gap-3">
+            <ParticipantsImport projectId={project.id} />
+
+            <form action={addParticipant} className="flex flex-wrap items-end gap-2">
+              <input type="hidden" name="projectId" value={project.id} />
+              <label className="block text-xs">
+                <span className="mb-1 block text-neutral-500">Имя</span>
+                <input
+                  name="name"
+                  required
+                  className="rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
+                />
+              </label>
+              <label className="block text-xs">
+                <span className="mb-1 block text-neutral-500">Организация</span>
+                <input
+                  name="organization"
+                  className="rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
+                />
+              </label>
+              <label className="block text-xs">
+                <span className="mb-1 block text-neutral-500">Произношение</span>
+                <input
+                  name="pronunciation"
+                  className="rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
+                />
+              </label>
+              <button
+                type="submit"
+                className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+              >
+                Добавить
+              </button>
+            </form>
+
+            <p className="max-w-prose text-xs text-neutral-500">
+              Участники — третьи лица, и согласия на хранение их данных у нас нет:
+              здесь только текст, никакой публичной страницы, и всё это исчезнет
+              вместе с проектом.
+            </p>
+          </div>
         )}
       </section>
 

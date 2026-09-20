@@ -447,6 +447,42 @@ export const Projects: CollectionConfig = {
         { name: "booth", type: "text", admin: { description: "Кабина или роль" } },
       ],
     },
+    {
+      /**
+       * Участники события: те, кого придётся переводить (L2–L5).
+       *
+       * Главное поле здесь — `pronunciation`, и оно не примечание.
+       * Неанглоязычное имя на слух не угадывается, а выяснять его надо
+       * до события, не в кабине. Поэтому произношение стоит рядом с именем
+       * и видно в списке, а не прячется в раскрывающейся строке.
+       *
+       * Только текст, как у спикеров в записях о работе (W4): это третьи
+       * лица, их согласия на хранение у нас нет и не будет. Ни связи
+       * с учётными записями, ни публичной страницы, ни жизни после проекта.
+       */
+      name: "participants",
+      type: "array",
+      admin: { description: "L2: кого предстоит переводить" },
+      fields: [
+        { name: "name", type: "text", required: true },
+        { name: "organization", type: "text" },
+        {
+          name: "pronunciation",
+          type: "text",
+          admin: {
+            description:
+              "L3: как произносится имя — своей транскрипцией, IPA, как удобно читать в кабине",
+          },
+        },
+        {
+          name: "pronunciationUnknown",
+          type: "checkbox",
+          defaultValue: false,
+          admin: { description: "L3: произношение не выяснено — видно, по кому остались вопросы" },
+        },
+        { name: "note", type: "text", admin: { description: "Должность, тема, оговорки" } },
+      ],
+    },
   ],
 };
 
@@ -814,6 +850,7 @@ export const UsageEvents: CollectionConfig = {
       required: true,
       options: [
         { label: "Глоссарий", value: "glossary" },
+        { label: "Участники", value: "participants" },
         { label: "Скрипт", value: "script" },
         { label: "Аудио", value: "audio" },
       ],

@@ -292,6 +292,28 @@ export interface Project {
         id?: string | null;
       }[]
     | null;
+  /**
+   * L2: кого предстоит переводить
+   */
+  participants?:
+    | {
+        name: string;
+        organization?: string | null;
+        /**
+         * L3: как произносится имя — своей транскрипцией, IPA, как удобно читать в кабине
+         */
+        pronunciation?: string | null;
+        /**
+         * L3: произношение не выяснено — видно, по кому остались вопросы
+         */
+        pronunciationUnknown?: boolean | null;
+        /**
+         * Должность, тема, оговорки
+         */
+        note?: string | null;
+        id?: string | null;
+      }[]
+    | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -527,7 +549,7 @@ export interface UsageEvent {
   id: number;
   user?: (number | null) | User;
   project?: (number | null) | Project;
-  kind: 'glossary' | 'script' | 'audio';
+  kind: 'glossary' | 'participants' | 'script' | 'audio';
   chars: number;
   costUsd: number;
   tier?: string | null;
@@ -554,6 +576,7 @@ export interface Activity {
   step:
     | 'project_created'
     | 'document_uploaded'
+    | 'participants_imported'
     | 'glossary_built'
     | 'script_generated'
     | 'audio_generated'
@@ -805,6 +828,16 @@ export interface ProjectsSelect<T extends boolean = true> {
         email?: T;
         user?: T;
         booth?: T;
+        id?: T;
+      };
+  participants?:
+    | T
+    | {
+        name?: T;
+        organization?: T;
+        pronunciation?: T;
+        pronunciationUnknown?: T;
+        note?: T;
         id?: T;
       };
   updatedAt?: T;

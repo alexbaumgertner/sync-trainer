@@ -14,6 +14,7 @@
 export const STEPS = [
   "project_created",
   "document_uploaded",
+  "participants_imported",
   "glossary_built",
   "script_generated",
   "audio_generated",
@@ -30,6 +31,7 @@ export type Step = (typeof STEPS)[number];
 export const STEP_LABELS: Record<Step, string> = {
   project_created: "проект заведён",
   document_uploaded: "документ загружен",
+  participants_imported: "список участников разобран",
   glossary_built: "глоссарий собран",
   script_generated: "скрипт сгенерирован",
   audio_generated: "аудио сгенерировано",

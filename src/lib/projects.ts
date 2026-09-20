@@ -165,6 +165,18 @@ export interface ProjectDetail {
    */
   team: { id: string; name: string; booth: string | null; linked: boolean }[];
   /**
+   * Участники события (L2–L3). Произношение — часть карточки, а не
+   * примечание: неанглоязычное имя на слух не угадывается.
+   */
+  participants: {
+    id: string;
+    name: string;
+    organization: string | null;
+    pronunciation: string | null;
+    unknown: boolean;
+    note: string | null;
+  }[];
+  /**
    * Владелец ли смотрящий (K1–K2).
    *
    * Коллега из состава видит проект и правит глоссарий, но не удаляет
@@ -265,6 +277,14 @@ export async function getProject(id: number, userId: number): Promise<ProjectDet
     glossaryCount: glossary.totalDocs,
     hasDebrief: debriefs.totalDocs > 0,
     isOwner,
+    participants: (project.participants ?? []).map((person) => ({
+      id: String(person.id),
+      name: person.name,
+      organization: person.organization?.trim() || null,
+      pronunciation: person.pronunciation?.trim() || null,
+      unknown: Boolean(person.pronunciationUnknown) && !person.pronunciation?.trim(),
+      note: person.note?.trim() || null,
+    })),
     team: (project.team ?? []).map((member) => ({
       id: String(member.id),
       name: member.name,
