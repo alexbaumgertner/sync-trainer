@@ -4,7 +4,7 @@ import type { StylePreset } from "./types";
 export const corporate: StylePreset = {
   id: "corporate",
   label: "Корпоративная конференция",
-  languages: { en: "draft", de: "draft", fr: "draft", tr: "draft" },
+  languages: { en: "draft", de: "draft", fr: "draft", tr: "draft", es: "draft" },
   setting: "Панель или презентация на отраслевой конференции",
 
   register:

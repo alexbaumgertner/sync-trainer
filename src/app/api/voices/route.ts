@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getClient, explainError, hasCredentials, NO_CREDENTIALS } from "@/lib/google-tts";
 import { guard } from "@/lib/auth";
-import { FALLBACK_VOICES } from "@/lib/voices";
+import { fallbackVoices } from "@/lib/voices";
 import { forLanguage, listVoicesCached } from "@/lib/voice-catalogue";
 
 export const runtime = "nodejs";
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const prefix = new URL(request.url).searchParams.get("lang") ?? "en";
 
   if (!hasCredentials()) {
-    return NextResponse.json({ voices: FALLBACK_VOICES, source: "fallback", warning: NO_CREDENTIALS });
+    return NextResponse.json({ voices: fallbackVoices(prefix), source: "fallback", warning: NO_CREDENTIALS });
   }
 
   try {
@@ -27,13 +27,13 @@ export async function GET(request: Request) {
 
     const forThisLanguage = forLanguage(voices, prefix);
     return NextResponse.json({
-      voices: forThisLanguage.length ? forThisLanguage : FALLBACK_VOICES,
+      voices: forThisLanguage.length ? forThisLanguage : fallbackVoices(prefix),
       source,
     });
   } catch (error) {
     // Без кредов и при отказе Google интерфейс всё равно должен открываться.
     return NextResponse.json({
-      voices: FALLBACK_VOICES,
+      voices: fallbackVoices(prefix),
       source: "fallback",
       warning: explainError(error),
     });

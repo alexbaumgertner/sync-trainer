@@ -4,7 +4,7 @@ import type { StylePreset } from "./types";
 export const eu: StylePreset = {
   id: "eu",
   label: "Институты ЕС",
-  languages: { en: "draft", de: "draft", fr: "draft" },
+  languages: { en: "draft", de: "draft", fr: "draft", es: "draft" },
   setting: "Слушание в комитете Европейского парламента или брифинг Комиссии",
 
   register:

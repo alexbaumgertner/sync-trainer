@@ -9,7 +9,6 @@ import {
   getProject,
   SOURCE_LANG_LABELS,
   STATUS_LABELS,
-  STYLE_PRESET_LABELS,
 } from "@/lib/projects";
 import {
   addParticipant,
@@ -81,6 +80,7 @@ export default async function ProjectPage({
     documents,
     ratings,
     costUsd,
+    styleLabel,
     glossaryCount,
     hasDebrief,
     team,
@@ -158,7 +158,7 @@ export default async function ProjectPage({
         </span>
         <span>{SOURCE_LANG_LABELS[project.sourceLang] ?? project.sourceLang}</span>
         <span>·</span>
-        <span>{STYLE_PRESET_LABELS[project.stylePreset] ?? project.stylePreset}</span>
+        <span>{styleLabel}</span>
         <span>·</span>
         <span className="tabular-nums">${costUsd.toFixed(2)}</span>
       </div>

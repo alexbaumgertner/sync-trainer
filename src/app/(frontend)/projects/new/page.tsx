@@ -2,7 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
 import { SOURCE_LANG_LABELS } from "@/lib/projects";
-import { PRESETS, qualityFor, supportedLanguages } from "@/presets";
+import { PRESETS, supportedLanguages } from "@/presets";
+import { payloadClient } from "@/lib/payload";
+import StyleFields from "@/components/style-fields";
 import { createProject } from "../actions";
 import AppShell from "@/components/app-shell";
 
@@ -17,12 +19,27 @@ export default async function NewProjectPage({
   if (!user) redirect("/");
   const { error } = await searchParams;
 
+  const payload = await payloadClient();
+  const custom = await payload.find({
+    collection: "style-presets",
+    sort: "label",
+    limit: 100,
+    depth: 0,
+    overrideAccess: true,
+  });
+
   return (
     <AppShell email={user.email} title="Новый проект">
       <form action={createProject} className="max-w-xl">
         {error === "title" && (
           <p className="mb-4 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
             Название обязательно — по нему вы найдёте проект в списке.
+          </p>
+        )}
+
+        {(error === "style" || error === "lang") && (
+          <p className="mb-4 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
+            Эта стилистика недоступна для выбранного языка речи. Выберите другую.
           </p>
         )}
 
@@ -43,32 +60,21 @@ export default async function NewProjectPage({
           </Field>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Язык речи" hint="На нём будет звучать тренировочное аудио" htmlFor="sourceLang">
-            <select id="sourceLang" aria-describedby="sourceLang-hint" name="sourceLang" defaultValue="en" className={inputClass}>
-              {supportedLanguages().map((value) => (
-                <option key={value} value={value}>
-                  {SOURCE_LANG_LABELS[value] ?? value}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Язык глоссария" htmlFor="targetLang">
-            <select id="targetLang" name="targetLang" defaultValue="ru" className={inputClass}>
-              <option value="ru">Русский</option>
-              <option value="en">English</option>
-            </select>
-          </Field>
-        </div>
+        <StyleFields
+          languages={supportedLanguages().map((value) => ({ value, label: SOURCE_LANG_LABELS[value] ?? value }))}
+          presets={PRESETS.map((preset) => ({
+            id: preset.id,
+            label: preset.label,
+            languages: preset.languages as Record<string, "full" | "draft">,
+          }))}
+          custom={custom.docs.map((doc) => ({ id: doc.id, label: doc.label }))}
+          inputClass={inputClass}
+        />
 
-        <Field label="Стилистика" hint="Определяет регистр, роли спикеров и терминологию. Черновые пресеты не выверены носителем" htmlFor="stylePreset">
-          <select id="stylePreset" aria-describedby="stylePreset-hint" name="stylePreset" defaultValue="un" className={inputClass}>
-            {PRESETS.map((preset) => (
-              <option key={preset.id} value={preset.id}>
-                {preset.label}
-                {qualityFor(preset, "en") === "full" ? "" : " — черновой"}
-              </option>
-            ))}
+        <Field label="Язык глоссария" htmlFor="targetLang">
+          <select id="targetLang" name="targetLang" defaultValue="ru" className={inputClass}>
+            <option value="ru">Русский</option>
+            <option value="en">English</option>
           </select>
         </Field>
 

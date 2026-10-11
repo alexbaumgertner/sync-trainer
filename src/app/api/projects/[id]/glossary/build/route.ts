@@ -6,7 +6,7 @@ import { recordStep } from "@/lib/activity";
 import { extractDocument, kindOf } from "@/lib/extract";
 import { extractGlossary } from "@/lib/glossary-generation";
 import { geminiConfigured, explainGeminiError, NO_GEMINI_KEY } from "@/lib/gemini";
-import { presetById } from "@/presets";
+import { resolveProjectPreset } from "@/presets/resolve";
 import { activeGeneration, failStaleGenerations } from "@/lib/generations";
 import { runAfterResponse } from "@/lib/background";
 import { addNewTerms, inheritedLayers } from "@/lib/glossary-store";
@@ -54,9 +54,9 @@ export async function POST(
     return NextResponse.json({ error: "Проект не найден." }, { status: 404 });
   }
 
-  const preset = presetById(project.stylePreset);
+  const preset = await resolveProjectPreset(payload, project);
   if (!preset) {
-    return NextResponse.json({ error: "Пресет проекта не найден." }, { status: 400 });
+    return NextResponse.json({ error: "Стилистика проекта не найдена: возможно, её удалили. Выберите другую." }, { status: 400 });
   }
 
   // Собираем по тем документам, чьи оригиналы на месте. Удалённый оригинал

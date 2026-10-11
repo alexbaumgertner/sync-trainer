@@ -80,6 +80,7 @@ export interface Config {
     'usage-events': UsageEvent;
     activity: Activity;
     ratings: Rating;
+    'style-presets': StylePreset;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -100,6 +101,7 @@ export interface Config {
     'usage-events': UsageEventsSelect<false> | UsageEventsSelect<true>;
     activity: ActivitySelect<false> | ActivitySelect<true>;
     ratings: RatingsSelect<false> | RatingsSelect<true>;
+    'style-presets': StylePresetsSelect<false> | StylePresetsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -267,9 +269,13 @@ export interface Project {
    * S4: когда предложили удалить оригиналы. Предлагаем один раз
    */
   sourcesRemindedAt?: string | null;
-  sourceLang: 'en' | 'de' | 'fr' | 'tr';
+  sourceLang: 'en' | 'de' | 'fr' | 'tr' | 'es';
   targetLang: 'ru' | 'en';
-  stylePreset: 'un' | 'court' | 'eu' | 'corporate';
+  stylePreset: 'un' | 'court' | 'eu' | 'corporate' | 'business';
+  /**
+   * Стилистика из админки. Если задана, перекрывает встроенную из поля выше
+   */
+  customStyle?: (number | null) | StylePreset;
   status: 'draft' | 'scripted' | 'ready' | 'held';
   /**
    * L1: кто идёт в кабину на это событие
@@ -314,6 +320,57 @@ export interface Project {
         id?: string | null;
       }[]
     | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Своя стилистика для проектов. Поле «Регистр» уходит в промт почти дословно
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "style-presets".
+ */
+export interface StylePreset {
+  id: number;
+  /**
+   * Название в списке стилистик
+   */
+  label: string;
+  /**
+   * Где это звучит — одна фраза. Пример: «Деловые переговоры с последовательным переводом»
+   */
+  setting: string;
+  /**
+   * Главное: регистр и синтаксис. Длина фраз, степень формальности, характерные конструкции, что делает речь трудной для переводчика. Пишите по-русски, как указание модели
+   */
+  register: string;
+  /**
+   * Роли спикеров, по одной в строке: «Роль — на чём сосредоточен». Роль уходит в скрипт как есть
+   */
+  speakerRoles?: string | null;
+  /**
+   * Характерные обороты и термины, по одному в строке, на языке речи
+   */
+  encouraged?: string | null;
+  /**
+   * Обороты, которых здесь быть не должно, по одному в строке
+   */
+  forbidden?: string | null;
+  /**
+   * Откуда брать эквиваленты для глоссария, по одному в строке
+   */
+  terminologySources?: string | null;
+  /**
+   * Какие цифры уместны и как они подаются
+   */
+  statistics?: string | null;
+  /**
+   * Чего избегать, по одному пункту в строке
+   */
+  avoid?: string | null;
+  /**
+   * Любые дополнительные указания; дописываются в промт отдельным разделом
+   */
+  extra?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -692,6 +749,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'ratings';
         value: number | Rating;
+      } | null)
+    | ({
+        relationTo: 'style-presets';
+        value: number | StylePreset;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -824,6 +885,7 @@ export interface ProjectsSelect<T extends boolean = true> {
   sourceLang?: T;
   targetLang?: T;
   stylePreset?: T;
+  customStyle?: T;
   status?: T;
   team?:
     | T
@@ -1018,6 +1080,24 @@ export interface RatingsSelect<T extends boolean = true> {
   target?: T;
   score?: T;
   note?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "style-presets_select".
+ */
+export interface StylePresetsSelect<T extends boolean = true> {
+  label?: T;
+  setting?: T;
+  register?: T;
+  speakerRoles?: T;
+  encouraged?: T;
+  forbidden?: T;
+  terminologySources?: T;
+  statistics?: T;
+  avoid?: T;
+  extra?: T;
   updatedAt?: T;
   createdAt?: T;
 }

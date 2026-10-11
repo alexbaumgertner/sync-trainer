@@ -64,6 +64,7 @@ const LANGUAGE_NAMES: Record<string, string> = {
   de: "немецком",
   fr: "французском",
   tr: "турецком",
+  es: "испанском",
   ru: "русском",
 };
 
@@ -294,6 +295,10 @@ export function buildScriptPrompt(context: PromptContext): string {
       "- не упрощай синтаксис: сложность здесь и есть предмет тренировки",
     ].join("\n"),
   );
+
+  if (preset.extra?.trim()) {
+    sections.push(["# Дополнительные указания стилистики", "", preset.extra.trim()].join("\n"));
+  }
 
   sections.push(
     [

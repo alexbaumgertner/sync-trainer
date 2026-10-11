@@ -21,17 +21,10 @@ import {
   hashInviteToken,
   inviteLink,
 } from "@/lib/invite-token";
-import { presetOptions, supportedLanguages } from "@/presets";
+import { LANGUAGE_LABELS, presetOptions, supportedLanguages } from "@/presets";
 import { STEP_LABELS, STEPS } from "@/lib/activity-steps";
 import { RATING_TARGETS, TARGET_LABELS } from "@/lib/ratings";
 import { PROFILE_LANGS, VISIBLE_FIELDS } from "@/lib/profile";
-
-const LANGUAGE_LABELS: Record<string, string> = {
-  en: "English",
-  de: "Deutsch",
-  fr: "Français",
-  tr: "Türkçe",
-};
 
 // Языки и пресеты берутся из реестра: добавление пресета не требует правок здесь.
 const SOURCE_LANGS = supportedLanguages().map((value) => ({
@@ -401,6 +394,15 @@ export const Projects: CollectionConfig = {
       required: true,
       defaultValue: "un",
       options: presetOptions(),
+    },
+    {
+      name: "customStyle",
+      type: "relationship",
+      relationTo: "style-presets",
+      admin: {
+        description:
+          "Стилистика из админки. Если задана, перекрывает встроенную из поля выше",
+      },
     },
     {
       name: "status",
@@ -1185,6 +1187,85 @@ const Engagements: CollectionConfig = {
   ],
 };
 
+/**
+ * Стилистики, заведённые в админке. Встроенные живут в коде (`src/presets`);
+ * здесь — те, что администратор собирает сам, без релиза.
+ *
+ * Списки (термины, запреты, источники) — текстом по строке на пункт: так
+ * в базе одна плоская таблица, а в админке не надо щёлкать по строкам массива.
+ * Язык стилистики не фиксируется: термины пишутся на языке, для которого её
+ * выбирают, а в промт она всегда уходит как «черновая».
+ */
+export const StylePresets: CollectionConfig = {
+  slug: "style-presets",
+  admin: {
+    useAsTitle: "label",
+    defaultColumns: ["label", "setting", "updatedAt"],
+    description:
+      "Своя стилистика для проектов. Поле «Регистр» уходит в промт почти дословно",
+  },
+  access: {
+    read: authenticated,
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
+  },
+  fields: [
+    { name: "label", type: "text", required: true, admin: { description: "Название в списке стилистик" } },
+    {
+      name: "setting",
+      type: "text",
+      required: true,
+      admin: { description: "Где это звучит — одна фраза. Пример: «Деловые переговоры с последовательным переводом»" },
+    },
+    {
+      name: "register",
+      type: "textarea",
+      required: true,
+      admin: {
+        description:
+          "Главное: регистр и синтаксис. Длина фраз, степень формальности, характерные конструкции, " +
+          "что делает речь трудной для переводчика. Пишите по-русски, как указание модели",
+      },
+    },
+    {
+      name: "speakerRoles",
+      type: "textarea",
+      admin: { description: "Роли спикеров, по одной в строке: «Роль — на чём сосредоточен». Роль уходит в скрипт как есть" },
+    },
+    {
+      name: "encouraged",
+      type: "textarea",
+      admin: { description: "Характерные обороты и термины, по одному в строке, на языке речи" },
+    },
+    {
+      name: "forbidden",
+      type: "textarea",
+      admin: { description: "Обороты, которых здесь быть не должно, по одному в строке" },
+    },
+    {
+      name: "terminologySources",
+      type: "textarea",
+      admin: { description: "Откуда брать эквиваленты для глоссария, по одному в строке" },
+    },
+    {
+      name: "statistics",
+      type: "textarea",
+      admin: { description: "Какие цифры уместны и как они подаются" },
+    },
+    {
+      name: "avoid",
+      type: "textarea",
+      admin: { description: "Чего избегать, по одному пункту в строке" },
+    },
+    {
+      name: "extra",
+      type: "textarea",
+      admin: { description: "Любые дополнительные указания; дописываются в промт отдельным разделом" },
+    },
+  ],
+};
+
 export const collections: CollectionConfig[] = [
   Users,
   Invitations,
@@ -1199,4 +1280,5 @@ export const collections: CollectionConfig[] = [
   UsageEvents,
   Activity,
   Ratings,
+  StylePresets,
 ];

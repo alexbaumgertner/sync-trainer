@@ -90,3 +90,50 @@ test("страницы проектов закрыты без входа", async
   await page.goto("/projects");
   await expect(page.getByLabel("Почта")).toBeVisible();
 });
+
+test("испанский и своя стилистика: выбираются в форме и сохраняются в проекте", async ({ page, context }) => {
+  const payload = await getPayload({ config });
+  const style = await payload.create({
+    collection: "style-presets",
+    data: { label: `Медицина ${stamp}`, setting: "Консилиум", register: "Клинический регистр." },
+    overrideAccess: true,
+  });
+
+  try {
+    await signIn(context);
+    await page.goto("/projects/new");
+
+    await page.getByLabel("Язык речи").selectOption("es");
+    // Суд и Гаага есть только на английском — на испанском в списке его нет
+    await expect(page.getByRole("option", { name: /Суд и Гаага/ })).toHaveCount(0);
+    await expect(page.getByRole("option", { name: "Деловой перевод — черновой" })).toHaveCount(1);
+
+    await page.getByLabel("Название").fill(`Испанский ${stamp}`);
+    await page.getByLabel("Стилистика").selectOption({ label: `Медицина ${stamp} — черновой` });
+    await page.getByRole("button", { name: "Создать" }).click();
+
+    await expect(page.getByRole("heading", { name: `Испанский ${stamp}` })).toBeVisible();
+    await expect(page.getByText("Español")).toBeVisible();
+    await expect(page.getByText(`Медицина ${stamp}`)).toBeVisible();
+
+    const saved = await payload.find({
+      collection: "projects",
+      where: { title: { equals: `Испанский ${stamp}` } },
+      depth: 0,
+      overrideAccess: true,
+    });
+    expect(saved.docs[0].sourceLang).toBe("es");
+    expect(saved.docs[0].customStyle).toBe(style.id);
+  } finally {
+    const projects = await payload.find({
+      collection: "projects",
+      where: { owner: { equals: userId } },
+      limit: 100,
+      overrideAccess: true,
+    });
+    for (const project of projects.docs) {
+      await payload.delete({ collection: "projects", id: project.id, overrideAccess: true });
+    }
+    await payload.delete({ collection: "style-presets", id: style.id, overrideAccess: true });
+  }
+});
