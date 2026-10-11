@@ -101,6 +101,48 @@ export const FALLBACK_VOICES: VoiceOption[] = [
   makeVoiceOption("en-US-Neural2-J", "en-US", "MALE"),
 ];
 
+/**
+ * Запасные голоса для остальных языков речи. Без них проект на немецком или
+ * испанском без ключей Google получал бы английских дикторов.
+ */
+const FALLBACK_BY_LANGUAGE: Record<string, VoiceOption[]> = {
+  de: [
+    makeVoiceOption("de-DE-Chirp3-HD-Aoede", "de-DE", "FEMALE"),
+    makeVoiceOption("de-DE-Chirp3-HD-Charon", "de-DE", "MALE"),
+    makeVoiceOption("de-DE-Neural2-F", "de-DE", "FEMALE"),
+    makeVoiceOption("de-DE-Neural2-B", "de-DE", "MALE"),
+  ],
+  fr: [
+    makeVoiceOption("fr-FR-Chirp3-HD-Aoede", "fr-FR", "FEMALE"),
+    makeVoiceOption("fr-FR-Chirp3-HD-Charon", "fr-FR", "MALE"),
+    makeVoiceOption("fr-FR-Neural2-A", "fr-FR", "FEMALE"),
+    makeVoiceOption("fr-FR-Neural2-B", "fr-FR", "MALE"),
+  ],
+  tr: [
+    makeVoiceOption("tr-TR-Chirp3-HD-Aoede", "tr-TR", "FEMALE"),
+    makeVoiceOption("tr-TR-Chirp3-HD-Charon", "tr-TR", "MALE"),
+  ],
+  es: [
+    makeVoiceOption("es-ES-Chirp3-HD-Aoede", "es-ES", "FEMALE"),
+    makeVoiceOption("es-ES-Chirp3-HD-Charon", "es-ES", "MALE"),
+    makeVoiceOption("es-US-Chirp3-HD-Kore", "es-US", "FEMALE"),
+    makeVoiceOption("es-US-Chirp3-HD-Puck", "es-US", "MALE"),
+    makeVoiceOption("es-ES-Neural2-A", "es-ES", "FEMALE"),
+    makeVoiceOption("es-ES-Neural2-F", "es-ES", "MALE"),
+  ],
+};
+
+/** Запасной список под префикс языка («es»); для неизвестного — английский. */
+export function fallbackVoices(prefix: string): VoiceOption[] {
+  return FALLBACK_BY_LANGUAGE[prefix.toLowerCase().slice(0, 2)] ?? FALLBACK_VOICES;
+}
+
+/** Голос по умолчанию для языка речи проекта. */
+export function defaultVoiceFor(prefix: string): string {
+  const list = FALLBACK_BY_LANGUAGE[prefix.toLowerCase().slice(0, 2)];
+  return list ? list[0].name : DEFAULT_VOICE;
+}
+
 /** Естественность важнее ручного контроля разметки — по умолчанию Chirp 3 HD. */
 export const DEFAULT_VOICE = "en-US-Chirp3-HD-Aoede";
 

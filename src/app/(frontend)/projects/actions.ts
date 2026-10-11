@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { currentUser } from "@/lib/auth";
 import { payloadClient } from "@/lib/payload";
 import { recordStep } from "@/lib/activity";
+import { presetById, qualityFor, supportedLanguages } from "@/presets";
 
 /** Создание проекта. Владельца проставляет хук коллекции из сессии. */
 export async function createProject(formData: FormData): Promise<void> {
@@ -19,7 +20,32 @@ export async function createProject(formData: FormData): Promise<void> {
     return value || undefined;
   };
 
+  const sourceLang = optional("sourceLang") ?? "en";
+  if (!supportedLanguages().includes(sourceLang)) redirect("/projects/new?error=lang");
+
+  // Стилистика приходит одним полем: id встроенной или «custom:<id>».
+  // Пару «язык — встроенный пресет» проверяем здесь, а не только в форме:
+  // форма скрывает неподходящее, но запрос можно собрать и руками.
+  const styleValue = optional("stylePreset") ?? "un";
+  let stylePreset = "un";
+  let customStyle: number | undefined;
+  if (styleValue.startsWith("custom:")) {
+    customStyle = Number(styleValue.slice("custom:".length));
+    if (!Number.isInteger(customStyle)) redirect("/projects/new?error=style");
+  } else {
+    const preset = presetById(styleValue);
+    if (!preset || !qualityFor(preset, sourceLang)) redirect("/projects/new?error=style");
+    stylePreset = styleValue;
+  }
+
   const payload = await payloadClient();
+  if (customStyle !== undefined) {
+    const exists = await payload
+      .findByID({ collection: "style-presets", id: customStyle, depth: 0, overrideAccess: true })
+      .catch(() => null);
+    if (!exists) redirect("/projects/new?error=style");
+  }
+
   const project = await payload.create({
     collection: "projects",
     data: {
@@ -28,9 +54,10 @@ export async function createProject(formData: FormData): Promise<void> {
       eventName: optional("eventName"),
       eventStartsOn: optional("eventStartsOn"),
       eventLocation: optional("eventLocation"),
-      sourceLang: (optional("sourceLang") ?? "en") as "en" | "de" | "fr" | "tr",
+      sourceLang: sourceLang as "en" | "de" | "fr" | "tr" | "es",
       targetLang: (optional("targetLang") ?? "ru") as "ru" | "en",
-      stylePreset: (optional("stylePreset") ?? "un") as "un" | "court" | "eu" | "corporate",
+      stylePreset: stylePreset as "un" | "court" | "eu" | "corporate" | "business",
+      customStyle,
       status: "draft",
     },
     overrideAccess: true,

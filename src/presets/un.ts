@@ -7,7 +7,7 @@ import type { StylePreset } from "./types";
 export const un: StylePreset = {
   id: "un",
   label: "ООН",
-  languages: { en: "full", de: "draft", fr: "draft", tr: "draft" },
+  languages: { en: "full", de: "draft", fr: "draft", tr: "draft", es: "draft" },
   setting: "Панельная дискуссия на конвенции агентства ООН",
 
   register:
@@ -129,6 +129,31 @@ export const un: StylePreset = {
       terminologySources: [
         "UNTERM — турецкие эквиваленты, где они есть",
         "турецкие версии материалов ООН и ПРООН по теме",
+      ],
+    },
+    es: {
+      speakerRoles: [
+        { role: "Moderador", focus: "рамка обсуждения, переходы между спикерами, вопросы к залу" },
+        { role: "Investigadora", focus: "структурные причины, данные исследований, осторожные формулировки" },
+        { role: "Representante de ONG", focus: "практика на местах, институциональные барьеры, прямые упрёки" },
+        { role: "Joven activista", focus: "поколенческий разрыв, цифровая среда, эмоциональная подача" },
+        { role: "Representante de donantes", focus: "финансирование, механизмы помощи, осторожность формулировок" },
+        { role: "Intervención del público", focus: "острый вопрос из зала к конкретным спикерам" },
+      ],
+      encouraged: [
+        "orden internacional basado en normas",
+        "incorporación de la perspectiva de género",
+        "espacio cívico",
+        "retroceso en materia de derechos humanos",
+        "multilateralismo",
+        "rendición de cuentas",
+        "mandato de negociación",
+        "arquitectura de la ayuda",
+      ],
+      forbidden: ["aprobación de la resolución", "cuestión de orden", "propongo que"],
+      terminologySources: [
+        "UNTERM — испанские эквиваленты",
+        "испанские версии докладов ООН и ЭКЛАК по теме",
       ],
     },
   },

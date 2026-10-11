@@ -3,7 +3,7 @@
 import { payloadClient } from "./payload";
 import { toRatingRow, type RatingRow } from "./ratings";
 import type { Project } from "@/payload-types";
-import { PRESETS } from "@/presets";
+import { LANGUAGE_LABELS, PRESETS } from "@/presets";
 import { STALE_AFTER_MS } from "./generations";
 
 /**
@@ -12,17 +12,23 @@ import { STALE_AFTER_MS } from "./generations";
  * потому что её тут нет.
  */
 
-export const SOURCE_LANG_LABELS: Record<string, string> = {
-  en: "English",
-  de: "Deutsch",
-  fr: "Français",
-  tr: "Türkçe",
-};
+export const SOURCE_LANG_LABELS: Record<string, string> = LANGUAGE_LABELS;
 
 /** Подписи берутся из реестра пресетов, чтобы не расходиться с ним. */
 export const STYLE_PRESET_LABELS: Record<string, string> = Object.fromEntries(
   PRESETS.map((preset) => [preset.id, preset.label]),
 );
+
+/** Подпись стилистики проекта; удалённая своя стилистика видна как таковая. */
+export function styleLabelOf(
+  project: { stylePreset: string; customStyle?: number | { id: number } | null },
+  customLabels: Map<number, string>,
+): string {
+  const ref = project.customStyle;
+  const customId = typeof ref === "object" && ref ? ref.id : ref;
+  if (typeof customId === "number") return customLabels.get(customId) ?? "Своя стилистика";
+  return STYLE_PRESET_LABELS[project.stylePreset] ?? project.stylePreset;
+}
 
 export const STATUS_LABELS: Record<string, string> = {
   draft: "Черновик",
@@ -38,6 +44,8 @@ export interface ProjectRow {
   eventStartsOn: string | null;
   sourceLang: string;
   stylePreset: string;
+  /** Подпись стилистики: своя из админки или встроенная */
+  styleLabel: string;
   status: string;
   costUsd: number;
   createdAt: string;
@@ -90,6 +98,26 @@ export async function listProjects(userId: number): Promise<ProjectRow[]> {
     overrideAccess: true,
   });
 
+  // Подписи своих стилистик — одним запросом на все проекты.
+  const customIds = [
+    ...new Set(
+      projects.docs
+        .map((p) => (typeof p.customStyle === "object" ? p.customStyle?.id : p.customStyle))
+        .filter((id): id is number => typeof id === "number"),
+    ),
+  ];
+  const customLabels = new Map<number, string>();
+  if (customIds.length) {
+    const found = await payload.find({
+      collection: "style-presets",
+      where: { id: { in: customIds } },
+      limit: customIds.length,
+      depth: 0,
+      overrideAccess: true,
+    });
+    for (const doc of found.docs) customLabels.set(doc.id, doc.label);
+  }
+
   const now = Date.now();
   const busyByProject = new Map<number, "script" | "audio">();
   for (const row of active.docs) {
@@ -116,6 +144,7 @@ export async function listProjects(userId: number): Promise<ProjectRow[]> {
     eventStartsOn: project.eventStartsOn ?? null,
     sourceLang: project.sourceLang,
     stylePreset: project.stylePreset,
+    styleLabel: styleLabelOf(project, customLabels),
     status: project.status,
     costUsd: costByProject.get(project.id) ?? 0,
     createdAt: project.createdAt,
@@ -153,6 +182,8 @@ export interface ProjectDetail {
     /** S3: лежит ли оригинал в хранилище прямо сейчас */
     hasSource: boolean;
   }[];
+  /** Подпись стилистики проекта */
+  styleLabel: string;
   /** Оценки материала: годится ли сгенерированное для работы */
   ratings: RatingRow[];
   costUsd: number;
@@ -249,8 +280,19 @@ export async function getProject(id: number, userId: number): Promise<ProjectDet
     }),
   ]);
 
+  const customRef = project.customStyle;
+  const customId = typeof customRef === "object" && customRef ? customRef.id : customRef;
+  const customLabels = new Map<number, string>();
+  if (typeof customId === "number") {
+    const doc = await payload
+      .findByID({ collection: "style-presets", id: customId, depth: 0, overrideAccess: true })
+      .catch(() => null);
+    if (doc) customLabels.set(doc.id, doc.label);
+  }
+
   return {
     project,
+    styleLabel: styleLabelOf(project, customLabels),
     files: artifacts.docs.map((doc) => {
       const generationId =
         typeof doc.generation === "object" ? (doc.generation?.id ?? null) : (doc.generation ?? null);

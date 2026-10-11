@@ -7,7 +7,7 @@ import { hasCredentials, NO_CREDENTIALS } from "@/lib/google-tts";
 import { runAudioJob } from "@/lib/audio-job";
 import { activeGeneration, failStaleGenerations } from "@/lib/generations";
 import { runAfterResponse } from "@/lib/background";
-import { formatForVoices, estimateCostUsd, DEFAULT_VOICE } from "@/lib/voices";
+import { formatForVoices, estimateCostUsd, defaultVoiceFor } from "@/lib/voices";
 import { budgetBlock, readUsage } from "@/lib/usage";
 
 export const runtime = "nodejs";
@@ -67,7 +67,7 @@ export async function POST(
     ssml = (await readArtifact(stored.blobPath))?.toString("utf8") ?? "";
   }
 
-  const defaultVoice = body.voice || DEFAULT_VOICE;
+  const defaultVoice = body.voice || defaultVoiceFor(project.sourceLang);
   const speakerVoices = body.speakerVoices ?? {};
   const usedVoices = [...new Set([defaultVoice, ...Object.values(speakerVoices)])];
   const format = formatForVoices(usedVoices);

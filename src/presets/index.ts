@@ -3,6 +3,7 @@ import { un } from "./un";
 import { court } from "./court";
 import { eu } from "./eu";
 import { corporate } from "./corporate";
+import { business } from "./business";
 
 export type { StylePreset, PresetQuality, SpeakerRole } from "./types";
 
@@ -11,7 +12,7 @@ export type { StylePreset, PresetQuality, SpeakerRole } from "./types";
  * создания проекта, и описание коллекции, и генератор промта — поэтому
  * добавление пресета не требует правок ни в одном из них.
  */
-export const PRESETS: StylePreset[] = [un, court, eu, corporate];
+export const PRESETS: StylePreset[] = [un, court, eu, corporate, business];
 
 export const presetById = (id: string): StylePreset | undefined =>
   PRESETS.find((preset) => preset.id === id);
@@ -32,7 +33,16 @@ export const qualityFor = (preset: StylePreset, lang: string): PresetQuality | n
  * и перестановка значений вызвала бы разрушительную миграцию ради ничего.
  * Первым идёт единственный полностью выверенный язык.
  */
-const LANGUAGE_ORDER = ["en", "de", "fr", "tr"];
+/** Подписи языков речи — единственный источник для форм, списков и админки. */
+export const LANGUAGE_LABELS: Record<string, string> = {
+  en: "English",
+  de: "Deutsch",
+  fr: "Français",
+  tr: "Türkçe",
+  es: "Español",
+};
+
+export const LANGUAGE_ORDER =["en", "de", "fr", "tr", "es"];
 
 /** Языки, для которых готов хотя бы один пресет. */
 export const supportedLanguages = (): string[] => {

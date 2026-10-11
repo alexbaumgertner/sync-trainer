@@ -5,7 +5,6 @@ import {
   listProjects,
   SOURCE_LANG_LABELS,
   STATUS_LABELS,
-  STYLE_PRESET_LABELS,
 } from "@/lib/projects";
 import AppShell from "@/components/app-shell";
 
@@ -77,7 +76,7 @@ export default async function ProjectsPage() {
                       {project.title}
                     </Link>
                     <div className="text-xs text-neutral-500">
-                      {STYLE_PRESET_LABELS[project.stylePreset] ?? project.stylePreset}
+                      {project.styleLabel}
                     </div>
                   </td>
                   <td className="py-3 pr-4 text-neutral-600 dark:text-neutral-300">
