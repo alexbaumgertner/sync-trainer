@@ -87,11 +87,59 @@ function makeParagraph(body: string): Block {
   return { kind: "p", speaker, body };
 }
 
+/**
+ * Google отклоняет запрос целиком, если в нём есть слишком длинное предложение
+ * ("This request contains sentences that are too long"). В испанском и
+ * переводных текстах такие предложения встречаются: одно на 500+ символов.
+ * Режем их по запятым, точкам с запятой и двоеточиям, в крайнем случае по
+ * словам, и ставим там точку — на слух это короткая пауза.
+ */
+export const MAX_SENTENCE_CHARS = 300;
+
+const SENTENCE_RE = /[^.!?]+[.!?]+["'\u201d\u2019)\]]*\s*|[^.!?]+$/g;
+
+export function splitLongSentences(body: string, max = MAX_SENTENCE_CHARS): string {
+  const visible = (t: string) => t.replace(/<[^>]+>/g, "").length;
+  const sentences = body.match(SENTENCE_RE);
+  if (!sentences) return body;
+  return sentences
+    .map((sentence) => {
+      if (visible(sentence) <= max) return sentence;
+      const trailing = sentence.match(/\s*$/)?.[0] ?? "";
+      const core = sentence.slice(0, sentence.length - trailing.length);
+      const groups: string[] = [];
+      let buf = "";
+      const push = () => {
+        if (buf.trim()) groups.push(buf.trim());
+        buf = "";
+      };
+      for (const clause of core.split(/(?<=[,;:])\s+/)) {
+        if (buf && visible(buf + " " + clause) > max) push();
+        if (visible(clause) > max) {
+          push();
+          for (const word of clause.split(/\s+/)) {
+            if (buf && visible(buf + " " + word) > max) push();
+            buf += (buf ? " " : "") + word;
+          }
+          continue;
+        }
+        buf += (buf ? " " : "") + clause;
+      }
+      push();
+      return (
+        groups
+          .map((g, i) => (i === groups.length - 1 ? g : g.replace(/[,;:]$/, "") + "."))
+          .join(" ") + trailing
+      );
+    })
+    .join("");
+}
+
 export function renderBlock(block: Block, stripLabels: boolean): string {
   if (block.kind === "break") return `<break time="${block.time}"/>`;
   let body = block.body.trim();
   if (stripLabels && block.speaker) body = body.replace(SPEAKER_RE, "");
-  return `<p>${body}</p>`;
+  return `<p>${splitLongSentences(body)}</p>`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -181,6 +229,7 @@ function splitToFit(
 
   let body = block.body.trim();
   if (stripLabels && block.speaker) body = body.replace(SPEAKER_RE, "");
+  body = splitLongSentences(body);
 
   const sentences = body.match(/[^.!?]+[.!?]+["'”’)\]]*\s*|[^.!?]+$/g) ?? [body];
   const out: string[] = [];
@@ -286,9 +335,11 @@ export function ssmlToSpoken(ssml: string): string {
 export function toPlainText(block: Extract<Block, { kind: "p" }>, stripLabels: boolean): string {
   let body = block.body.trim();
   if (stripLabels && block.speaker) body = body.replace(SPEAKER_RE, "");
-  return unescapeXml(body.replace(/<[^>]+>/g, " "))
-    .replace(/\s+/g, " ")
-    .trim();
+  return splitLongSentences(
+    unescapeXml(body.replace(/<[^>]+>/g, " "))
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
 }
 
 function planTextItems(blocks: Block[], opts: PlanOptions): PlanItem[] {
